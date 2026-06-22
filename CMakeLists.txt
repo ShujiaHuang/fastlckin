@@ -26,12 +26,18 @@ if(STATIC_BUILD)
     endif()
 endif()
 
-# htslib configure flags: always disable remote-URL support (not needed).
-# For STATIC_BUILD also disable libdeflate (auto-detected on CI hosts) to
-# avoid pulling in an extra dependency that we don't link.
-set(HTSLIB_CONFIGURE_FLAGS --disable-s3 --disable-gcs --disable-libcurl)
+# For static builds:
+# --disable-libcurl  : we only read local files, no remote URLs.
+# --without-libdeflate: htslib's ./configure auto-detects libdeflate when
+#                       present on the host (e.g. ubuntu-22.04 GH runners),
+#                       and then emits libhts.a with libdeflate_* references.
+#                       Since we do not link -ldeflate, we explicitly disable it.
+#                       htslib falls back to zlib transparently with no
+#                       functional loss.
 if(STATIC_BUILD)
-    list(APPEND HTSLIB_CONFIGURE_FLAGS --without-libdeflate)
+    set(HTSLIB_CONFIGURE_FLAGS --disable-libcurl --without-libdeflate)
+else()
+    set(HTSLIB_CONFIGURE_FLAGS "")
 endif()
 
 # ── htslib ──────────────────────────────────────────────────────────
@@ -52,9 +58,11 @@ configure_file(${HTSLIB_STAMP}.in ${HTSLIB_STAMP} COPYONLY)
 
 add_custom_command(
     OUTPUT  ${HTSLIB_A}
-    COMMAND sh -c "autoreconf -i 2>/dev/null || true"
-    COMMAND sh -c "./configure ${_HTSLIB_FLAGS_STR}"
-    COMMAND $(MAKE) -j${NPROC} lib-static
+    COMMAND ${CMAKE_COMMAND} -E echo "Configuring htslib with: ${HTSLIB_CONFIGURE_FLAGS}"
+    COMMAND $(MAKE) distclean || true
+    COMMAND autoreconf -i
+    COMMAND ./configure ${HTSLIB_CONFIGURE_FLAGS}
+    COMMAND $(MAKE) -j${NPROC} libhts.a
     WORKING_DIRECTORY ${HTSLIB_DIR}
     DEPENDS ${HTSLIB_STAMP}
     COMMENT "Building htslib (parallel, j=${NPROC})"
@@ -67,7 +75,12 @@ include_directories(${HTSLIB_DIR}/htslib)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # ── System libs ─────────────────────────────────────────────────────
-set(COMMON_SYS_LIB pthread z bz2 lzma m)
+set(COMMON_SYS_LIB pthread z bz2 m lzma curl)
+if(NOT APPLE)
+    list(APPEND COMMON_SYS_LIB ssl crypto)
+endif()
+
+set(HTSLIB ${HTSLIB_A})
 
 # ── fastlckin executable ───────────────────────────────────────────
 file(GLOB_RECURSE SRC_FL CONFIGURE_DEPENDS
@@ -97,8 +110,10 @@ if(STATIC_BUILD AND APPLE)
         HINTS /opt/homebrew/opt/xz/lib /usr/local/opt/xz/lib
         REQUIRED NO_DEFAULT_PATH)
     message(STATUS "Static libs: zlib=${ZLIB_STATIC} bz2=${BZ2_STATIC} lzma=${LZMA_STATIC}")
+    message(STATUS "Dynamic (system): curl")
     target_link_libraries(fastlckin
         ${HTSLIB_A}
+        curl
         ${LZMA_STATIC}
         ${BZ2_STATIC}
         ${ZLIB_STATIC}
@@ -120,7 +135,7 @@ elseif(STATIC_BUILD AND NOT APPLE)
         pthread m
     )
 else()
-    target_link_libraries(fastlckin ${HTSLIB_A} ${COMMON_SYS_LIB})
+    target_link_libraries(fastlckin ${HTSLIB} ${COMMON_SYS_LIB})
 endif()
 
 # ── Unit tests ──────────────────────────────────────────────────────
