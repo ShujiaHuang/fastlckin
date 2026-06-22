@@ -8,13 +8,14 @@
  * Run: generate_test_data
  */
 
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
-#include <random>
+#include <algorithm>
 #include <cstdint>
 #include <cmath>
+#include <fstream>
+#include <iostream>
+#include <random>
+#include <string>
+#include <vector>
 #include <sys/stat.h>
 
 // Generate synthetic test data
