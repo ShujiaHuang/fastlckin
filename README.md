@@ -2,8 +2,8 @@
 
 **Fast Maximum Likelihood Kinship Estimation from Low-Coverage Sequencing Data**
 
-> A high-performance C++17 re-implementation and optimization of the
-> [lcMLkin](https://github.com/COMBINE-lab/lcMLkin) algorithm.
+> A high-performance C++17 tool for maximum likelihood kinship estimation
+> from low-coverage sequencing data using genotype likelihoods.
 
 [![Build fastlckin](https://github.com/ShujiaHuang/fastlckin/actions/workflows/build.yml/badge.svg)](https://github.com/ShujiaHuang/fastlckin/actions/workflows/build.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
@@ -333,8 +333,8 @@ fastlckin implements the **GLkin** maximum likelihood framework:
    `M(p, FST, i) = (1 - FST)·p + i·FST`.
 
 3. **Built-in LD Pruning** — Sliding-window LD pruning (equivalent to
-   PLINK `--indep-pairwise`) replaces external PLINK calls, eliminating
-   the per-pair I/O bottleneck of the original.
+   PLINK `--indep-pairwise`) is implemented natively, eliminating the
+   per-pair external tool calls and associated I/O overhead.
 
 4. **Nelder-Mead Optimization** — Multi-restart Nelder-Mead simplex
    method finds the MLE of (k1, k2) under the IBD constraint space
@@ -404,9 +404,4 @@ If you use fastlckin in your research, please cite:
 
 - The original lcMLkin method: **Gazal et al. (2014)** *Bioinformatics*
 - Anderson & Weir (2007) IBS|IBD model: **Anderson & Weir (2007)** *Genetics*
-# fastlcKin
-
-A high-performance C++ implementation of  maximum likelihood estimation of relatedness from low-coverage sequencing data.
-
-> A high-performance C++ re-implementation and optimization of the lcMLkin algorithm.
 
