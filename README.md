@@ -211,7 +211,7 @@ Optional:
 
 The output is a TSV file with the following columns:
 
-```
+```tsv
 Ind1	Ind2	k0	k1	k2	PI_HAT	N_SNPs	Relationship
 SampleA	SampleB	1.000000	0.000000	0.000000	0.000000	12345	Unrelated
 SampleA	SampleC	0.260000	0.490000	0.250000	0.495000	11987	First-degree
@@ -273,9 +273,11 @@ relationship categories.
 
 **Basic kinship estimation:**
 
+> Input data should be autosomes only.
+
 ```bash
 fastlckin relatedness \
-    -v cohort.vcf.gz \
+    -v cohort_autosomes.vcf.gz \
     -p /path/to/plink_prefix \
     -t 8 \
     -o results.kinship.tsv
@@ -310,8 +312,8 @@ fastlckin relatedness \
 fastlckin relatedness \
     -v cohort.vcf.gz \
     -p /path/to/plink_prefix \
-    --maf-min 0.10 --maf-max 0.90 \
-    --ld-window 100 --ld-step 10 --ld-r2 0.5 \
+    --maf-min 0.05 --maf-max 0.95 \
+    --ld-window 50 --ld-step 5 --ld-r2 0.2 \
     -t 8 \
     -o results.kinship.tsv
 ```
@@ -380,8 +382,8 @@ fastlckin implements the **GLkin** maximum likelihood framework:
   is unambiguous and more commonly available. GL (log10-scaled) is used as
   fallback.
 - **LD pruning**: The default parameters (`--ld-window 50 --ld-step 5
-  --ld-r2 0.8`) are conservative. For dense SNP arrays, consider tightening
-  (`--ld-r2 0.5`).
+  --ld-r2 0.5`) are conservative. For dense SNP arrays, consider tightening
+  (`--ld-r2 0.2`).
 - **MAF filtering**: SNPs with very low or very high allele frequencies
   carry little information. The default `[0.05, 0.95]` range is suitable
   for most analyses.
@@ -391,7 +393,7 @@ fastlckin implements the **GLkin** maximum likelihood framework:
 - **Thread count**: Use `-t` to match available CPU cores — pair
   estimation is embarrassingly parallel.
 - **GQ filtering**: `--gq-min 1` filters out truly missing genotypes.
-  Increase to 10–20 for stricter quality control on low-coverage data.
+  Increase to 10–20 (or even above) for stricter quality control on low-coverage data.
 
 ---
 
@@ -427,10 +429,10 @@ fastlckin is licensed under the
 
 ---
 
-## Citation
+## Reference
 
 If you use fastlckin in your research, please cite:
-
+- <https://genome.sph.umich.edu/w/images/1/1f/666.2017.12_-_Kinship_Coefficients.pdf>
 - The original lcMLkin method: **Gazal et al. (2014)** *Bioinformatics*
 - Anderson & Weir (2007) IBS|IBD model: **Anderson & Weir (2007)** *Genetics*
 

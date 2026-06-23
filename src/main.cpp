@@ -33,7 +33,7 @@ static int usage() {
 // ────────────────────────────────────────────────────────────────────
 // Sub-command: relatedness
 // ────────────────────────────────────────────────────────────────────
-static int relatedness_usage() {
+static int relatedness_usage(const fastlckin::KinshipConfig &config) {
     std::cerr << "\n"
               << "Usage: fastlckin relatedness -v <VCF> -p <PLINK_PREFIX> [options]\n\n"
               << "Required:\n"
@@ -41,18 +41,18 @@ static int relatedness_usage() {
               << "  -p, --plink PREFIX      PLINK binary file prefix (.bed/.bim/.fam)\n\n"
               << "Optional:\n"
               << "  -F, --freq FILE         Pre-computed .frq file (default: auto-compute)\n"
-              << "  -f, --fst FLOAT         Prior FST value (default: 0.0)\n"
-              << "  -t, --threads INT       Number of threads (default: 1)\n"
+              << "  -f, --fst FLOAT         Prior FST value (default: " << config.fst << ")\n"
+              << "  -t, --threads INT       Number of threads (default: " << config.threads << ")\n"
               << "  -o, --output FILE       Output TSV path (default: auto-generated)\n"
-              << "      --maf-min FLOAT     Min allele frequency filter (default: 0.05)\n"
-              << "      --maf-max FLOAT     Max allele frequency filter (default: 0.95)\n"
-              << "      --ld-window INT     LD pruning window size in SNPs (default: 50)\n"
-              << "      --ld-step INT       LD pruning step size (default: 5)\n"
-              << "      --ld-r2 FLOAT       LD pruning r2 threshold (default: 0.8)\n"
-              << "      --gq-min INT        Min GQ quality threshold (default: 1)\n"
-              << "      --n-restarts INT    Nelder-Mead restarts (default: 3)\n"
-              << "      --xtol FLOAT        Optimizer parameter convergence (default: 0.01)\n"
-              << "      --ftol FLOAT        Optimizer function convergence (default: 0.01)\n"
+              << "      --maf-min FLOAT     Min allele frequency filter (default: " << config.maf_min << ")\n"
+              << "      --maf-max FLOAT     Max allele frequency filter (default: " << config.maf_max << ")\n"
+              << "      --ld-window INT     LD pruning window size in SNPs (default: " << config.ld_config.window_size << ")\n"
+              << "      --ld-step INT       LD pruning step size (default: " << config.ld_config.step_size << ")\n"
+              << "      --ld-r2 FLOAT       LD pruning r2 threshold (default: " << config.ld_config.r2_threshold << ")\n"
+              << "      --gq-min INT        Min GQ quality threshold (default: " << config.gq_min << ")\n"
+              << "      --n-restarts INT    Nelder-Mead restarts (default: " << config.n_restarts << ")\n"
+              << "      --xtol FLOAT        Optimizer parameter convergence (default: " << config.nm_config.xtol << ")\n"
+              << "      --ftol FLOAT        Optimizer function convergence (default: " << config.nm_config.ftol << ")\n"
               << "      --classify          Enable automatic relationship classification\n"
               << "      --verbose           Verbose logging\n"
               << "  -h, --help              Show this help message\n";
@@ -88,31 +88,31 @@ static int run_relatedness(int argc, char* argv[]) {
     optind = 1;
     while ((c = getopt_long(argc, argv, "v:p:F:f:t:o:h", long_options, nullptr)) != -1) {
         switch (c) {
-        case 'v': config.vcf_path = optarg; break;
-        case 'p': config.plink_prefix = optarg; break;
-        case 'F': config.freq_path = optarg; break;
-        case 'f': config.fst = std::atof(optarg); break;
-        case 't': config.threads = std::atoi(optarg); break;
-        case 'o': config.output_path = optarg; break;
-        case 1001: config.maf_min = std::atof(optarg); break;
-        case 1002: config.maf_max = std::atof(optarg); break;
-        case 1003: config.ld_config.window_size = std::atoi(optarg); break;
-        case 1004: config.ld_config.step_size = std::atoi(optarg); break;
-        case 1005: config.ld_config.r2_threshold = std::atof(optarg); break;
-        case 1006: config.gq_min = std::atoi(optarg); break;
-        case 1007: config.n_restarts = std::atoi(optarg); break;
-        case 1008: config.nm_config.xtol = std::atof(optarg); break;
-        case 1009: config.nm_config.ftol = std::atof(optarg); break;
-        case 1010: config.classify = true; break;
-        case 1011: config.verbose = true; break;
-        case 'h': return relatedness_usage();
-        default:  return relatedness_usage();
+            case 'v': config.vcf_path = optarg; break;
+            case 'p': config.plink_prefix = optarg; break;
+            case 'F': config.freq_path = optarg; break;
+            case 'f': config.fst = std::atof(optarg); break;
+            case 't': config.threads = std::atoi(optarg); break;
+            case 'o': config.output_path = optarg; break;
+            case 1001: config.maf_min = std::atof(optarg); break;
+            case 1002: config.maf_max = std::atof(optarg); break;
+            case 1003: config.ld_config.window_size = std::atoi(optarg); break;
+            case 1004: config.ld_config.step_size = std::atoi(optarg); break;
+            case 1005: config.ld_config.r2_threshold = std::atof(optarg); break;
+            case 1006: config.gq_min = std::atoi(optarg); break;
+            case 1007: config.n_restarts = std::atoi(optarg); break;
+            case 1008: config.nm_config.xtol = std::atof(optarg); break;
+            case 1009: config.nm_config.ftol = std::atof(optarg); break;
+            case 1010: config.classify = true; break;
+            case 1011: config.verbose = true; break;
+            case 'h': return relatedness_usage(config);
+            default:  return relatedness_usage(config);
         }
     }
 
     if (config.vcf_path.empty() || config.plink_prefix.empty()) {
-        std::cerr << "Error: --vcf and --plink are required.\n";
-        return relatedness_usage();
+        std::cerr << "Error: missing required arguments.\n";
+        return relatedness_usage(config);
     }
 
     fastlckin::KinshipEstimator estimator(config);
