@@ -17,6 +17,7 @@ struct LDPruneConfig {
     int window_size = 50;       ///< Window size in SNPs
     int step_size = 5;          ///< Step size
     double r2_threshold = 0.5;  ///< r² threshold
+    bool skip = false;          ///< If true, skip LD pruning entirely (use all unmasked SNPs)
 };
 
 /// Compute r² (squared Pearson correlation) between two SNP genotype vectors

@@ -392,9 +392,15 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
                   _gl_matrix[ind2][s].masked;
     }
 
-    // LD pruning (mode-dependent)
+    // LD pruning (mode-dependent) or use all unmasked SNPs if skipped
     std::vector<int> retained;
-    if (_config.input_mode == InputMode::VCF_ONLY) {
+    if (_config.ld_config.skip) {
+        // Skip LD pruning: retain all unmasked SNPs
+        retained.reserve(n_snps);
+        for (int s = 0; s < n_snps; ++s) {
+            if (!mask[s]) retained.push_back(s);
+        }
+    } else if (_config.input_mode == InputMode::VCF_ONLY) {
         retained = ld_prune_from_likelihoods(_expected_genotypes, mask, _config.ld_config);
     } else {
         retained = ld_prune(_bed_genotypes, mask, _config.ld_config);
@@ -534,7 +540,9 @@ std::vector<KinshipResult> KinshipEstimator::run() {
             break;
         case InputMode::VCF_PLINK:
             _load_vcf();
-            _load_bed_genotypes();
+            if (!_config.ld_config.skip) {
+                _load_bed_genotypes();  // Only needed for LD pruning
+            }
             break;
         case InputMode::PLINK_ONLY:
             _load_plink_as_gl();
@@ -557,17 +565,23 @@ std::vector<KinshipResult> KinshipEstimator::run() {
     // Step 3: Precompute IBS|IBD matrix (all modes)
     _precompute_ibs_ibd();
 
-    // Step 4: Prepare LD pruning data (mode-dependent)
-    switch (_config.input_mode) {
-        case InputMode::VCF_ONLY:
-            _compute_expected_g();
-            break;
-        case InputMode::VCF_PLINK:
-            // _bed_genotypes already loaded in Step 1
-            break;
-        case InputMode::PLINK_ONLY:
-            // _bed_genotypes already loaded in _load_plink_as_gl()
-            break;
+    // Step 4: Prepare LD pruning data (mode-dependent; skipped if --no-ld-prune)
+    if (!_config.ld_config.skip) {
+        switch (_config.input_mode) {
+            case InputMode::VCF_ONLY:
+                _compute_expected_g();
+                break;
+            case InputMode::VCF_PLINK:
+                // _bed_genotypes already loaded in Step 1
+                break;
+            case InputMode::PLINK_ONLY:
+                // _bed_genotypes already loaded in _load_plink_as_gl()
+                break;
+        }
+    } else {
+        if (_config.verbose) {
+            std::cerr << "[fastlckin] LD pruning skipped (--no-ld-prune): using all unmasked SNPs\n";
+        }
     }
 
     // Step 5: Generate all pairs
@@ -641,9 +655,13 @@ std::vector<KinshipResult> KinshipEstimator::run() {
         ofs << " -t " << _config.threads << "\n";
         ofs << "# Date: " << time_buf << "\n";
         ofs << "# FST: " << _config.fst
-            << "  MAF_filter: [" << _config.maf_min << ", " << _config.maf_max << "]"
-            << "  LD_prune: " << _config.ld_config.window_size << "/"
-            << _config.ld_config.step_size << "/" << _config.ld_config.r2_threshold << "\n";
+            << "  MAF_filter: [" << _config.maf_min << ", " << _config.maf_max << "]";
+        if (_config.ld_config.skip) {
+            ofs << "  LD_prune: skipped (all unmasked SNPs used)\n";
+        } else {
+            ofs << "  LD_prune: " << _config.ld_config.window_size << "/"
+                << _config.ld_config.step_size << "/" << _config.ld_config.r2_threshold << "\n";
+        }
 
         // Column header
         ofs << "Ind1\tInd2\tk0\tk1\tk2\tPI_HAT\tN_SNPs";

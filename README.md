@@ -223,6 +223,7 @@ Optional:
       --ld-window INT     LD pruning window size in SNPs (default: 50)
       --ld-step INT       LD pruning step size (default: 5)
       --ld-r2 FLOAT       LD pruning r2 threshold (default: 0.5)
+      --no-ld-prune       Skip LD pruning entirely (use all unmasked SNPs)
       --gq-min INT        Min GQ quality threshold (default: 1)
       --pl-field STR      VCF FORMAT field for Phred-scaled GL (default: PL)
       --n-restarts INT    Nelder-Mead restarts (default: 3)
@@ -250,7 +251,7 @@ SampleA	SampleC	0.260000	0.490000	0.250000	0.495000	11987	First-degree
 | `k1` | IBD=1 probability |
 | `k2` | IBD=2 probability |
 | `PI_HAT` | Kinship coefficient: π̂ = 0.5·k1 + k2 |
-| `N_SNPs` | Number of SNPs used (after LD pruning) |
+| `N_SNPs` | Number of SNPs used (after LD pruning, or all unmasked SNPs with `--no-ld-prune`) |
 | `Relationship` | Classification label (only with `--classify`) |
 
 ### Relationship classification (`--classify`)
@@ -371,6 +372,19 @@ fastlckin relatedness \
     -o results.kinship.tsv
 ```
 
+**Skipping LD pruning (for extremely sparse data like ancient DNA or NIPT):**
+
+```bash
+fastlckin relatedness \
+    -v ancient_dna.vcf.gz \
+    --no-ld-prune \
+    -t 8 \
+    -o results.kinship.tsv
+```
+
+When SNPs are very sparse, LD pruning removes valuable data and the r²
+estimator itself is unreliable. `--no-ld-prune` retains all unmasked SNPs.
+
 ---
 
 ## `fastlckin freq` — Compute allele frequencies
@@ -427,7 +441,9 @@ fastlckin implements the **GLkin** maximum likelihood framework:
 4. **Built-in LD Pruning** — Sliding-window LD pruning (equivalent to
    PLINK `--indep-pairwise`) is implemented natively. In VCF+PLINK and
    PLINK-only modes, r² is computed from hard genotypes. In VCF-only mode,
-   r² is computed from **posterior expected genotypes** E[G|D,p].
+   r² is computed from **posterior expected genotypes** E[G|D,p]. LD pruning
+   can be skipped entirely with `--no-ld-prune` (useful for extremely sparse
+   data such as ancient DNA or NIPT where LD estimation is unreliable).
 
 5. **Nelder-Mead Optimization** — Multi-restart Nelder-Mead simplex
    method finds the MLE of (k1, k2) under the IBD constraint space
@@ -450,13 +466,18 @@ fastlckin implements the **GLkin** maximum likelihood framework:
   Use PLINK-only for SNP array data or high-coverage sequencing.
 - **LD pruning**: The default parameters (`--ld-window 50 --ld-step 5
   --ld-r2 0.5`) are conservative. For dense SNP arrays or high-coverage
-  (~30x or >20x) WGS data, consider tightening (`--ld-r2 0.2`). For extremly
-  low-coverage (<1x) WGS data (like ancient DNA), consider using `--ld-r2 0.9`
-  or even larger.
+  (~30x or >20x) WGS data, consider tightening (`--ld-r2 0.2`). For extremely
+  low-coverage data (e.g., ancient DNA, NIPT) where SNPs are very sparse,
+  use `--no-ld-prune` to skip LD pruning entirely — the r² estimator is
+  unreliable with too few overlapping samples, and pruning only discards
+  valuable data.
 - **VCF-only LD note**: In VCF-only mode, expected-genotype r² is a
-  conservative (attenuated) estimator of true LD. Fewer SNPs are pruned
-  compared to hard-genotype LD pruning. For low-coverage data, consider
-  using a stricter `--ld-r2` threshold (e.g., 0.2–0.3).
+  conservative (attenuated) estimator of true LD — the bias increases with
+  lower coverage. This means fewer SNPs are pruned compared to hard-genotype
+  LD pruning at the same `--ld-r2` threshold. For high-coverage VCF data,
+  consider tightening (`--ld-r2 0.2–0.3`). For extremely low-coverage data,
+  use `--no-ld-prune` instead — the attenuated r² estimator makes LD pruning
+  largely ineffective when coverage is very low.
 - **MAF filtering**: SNPs with very low or very high allele frequencies
   carry little information. The default `[0.05, 0.95]` range is suitable
   for most analyses.

@@ -186,6 +186,84 @@ TEST_CASE(input_mode_names) {
     CHECK(std::string(input_mode_name(InputMode::PLINK_ONLY)) == "PLINK-only");
 }
 
+TEST_CASE(no_ld_prune_skip_flag) {
+    // With --no-ld-prune, all unmasked SNPs should be used and pipeline should succeed
+    if (!test_data_exists()) {
+        std::cerr << "  SKIP: test data not found\n";
+        return;
+    }
+
+    // Run Mode 3 with LD pruning skipped
+    KinshipConfig config;
+    config.plink_prefix = "tests/data/test";
+    config.input_mode = InputMode::PLINK_ONLY;
+    config.output_path = "/tmp/test_no_ld_prune.tsv";
+    config.ld_config.skip = true;
+
+    KinshipEstimator estimator(config);
+    auto results = estimator.run();
+
+    CHECK(results.size() == 190);
+
+    for (const auto& r : results) {
+        CHECK(!r.failed);
+        CHECK(r.n_snps > 0);
+        CHECK(r.k0 >= 0.0 && r.k0 <= 1.0);
+        CHECK(r.k1 >= 0.0 && r.k1 <= 1.0);
+        CHECK(r.k2 >= 0.0 && r.k2 <= 1.0);
+        CHECK_NEAR(r.k0 + r.k1 + r.k2, 1.0, 0.01);
+    }
+
+    // Verify the output header contains "skipped"
+    std::ifstream ifs("/tmp/test_no_ld_prune.tsv");
+    CHECK(ifs.is_open());
+    std::string line;
+    bool found_skipped = false;
+    for (int i = 0; i < 6 && std::getline(ifs, line); ++i) {
+        if (line.find("LD_prune: skipped") != std::string::npos) {
+            found_skipped = true;
+            break;
+        }
+    }
+    CHECK(found_skipped);
+}
+
+TEST_CASE(no_ld_prune_retains_more_snps) {
+    // With --no-ld-prune, N_SNPs should be >= LD-pruned version
+    if (!test_data_exists()) {
+        std::cerr << "  SKIP: test data not found\n";
+        return;
+    }
+
+    // Run with LD pruning (default)
+    KinshipConfig c_ld;
+    c_ld.plink_prefix = "tests/data/test";
+    c_ld.input_mode = InputMode::PLINK_ONLY;
+    c_ld.output_path = "/tmp/test_ld_on.tsv";
+    KinshipEstimator e_ld(c_ld);
+    auto r_ld = e_ld.run();
+
+    // Run without LD pruning
+    KinshipConfig c_nold;
+    c_nold.plink_prefix = "tests/data/test";
+    c_nold.input_mode = InputMode::PLINK_ONLY;
+    c_nold.output_path = "/tmp/test_ld_off.tsv";
+    c_nold.ld_config.skip = true;
+    KinshipEstimator e_nold(c_nold);
+    auto r_nold = e_nold.run();
+
+    CHECK(r_ld.size() == r_nold.size());
+
+    // No-LD should retain >= LD-pruned SNPs for each pair
+    int n_more = 0, n_equal = 0;
+    for (size_t i = 0; i < r_ld.size(); ++i) {
+        if (r_nold[i].n_snps > r_ld[i].n_snps) ++n_more;
+        else if (r_nold[i].n_snps == r_ld[i].n_snps) ++n_equal;
+    }
+    // At least some pairs should have more SNPs without LD pruning
+    CHECK(n_more + n_equal == static_cast<int>(r_ld.size()));
+}
+
 int main() {
     return RUN_ALL_TESTS();
 }

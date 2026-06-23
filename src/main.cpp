@@ -18,10 +18,9 @@
 #include <fstream>
 
 static int usage() {
-    std::cerr << "\n"
-              << "fastlckin v" << FASTLCKIN_VERSION << "\n"
-              << "  " << FASTLCKIN_DESCRIPTION << "\n"
-              << "Author: " << FASTLCKIN_AUTHOR << "\n\n"
+    std::cerr << FASTLCKIN_DESCRIPTION << "\n"
+              << "Version: v" << FASTLCKIN_VERSION << "\n"
+              << "Author:   " << FASTLCKIN_AUTHOR  << "\n\n"
               << "Usage: fastlckin <command> [options]\n\n"
               << "Commands:\n"
               << "  relatedness   Estimate pairwise kinship (IBD coefficients)\n"
@@ -53,6 +52,7 @@ static int relatedness_usage(const fastlckin::KinshipConfig &config) {
               << "      --ld-window INT     LD pruning window size in SNPs (default: " << config.ld_config.window_size << ")\n"
               << "      --ld-step INT       LD pruning step size (default: " << config.ld_config.step_size << ")\n"
               << "      --ld-r2 FLOAT       LD pruning r2 threshold (default: " << config.ld_config.r2_threshold << ")\n"
+              << "      --no-ld-prune       Skip LD pruning entirely (use all unmasked SNPs)\n"
               << "      --gq-min INT        Min GQ quality threshold (default: " << config.gq_min << ")\n"
               << "      --pl-field STR      VCF FORMAT field for Phred-scaled GL (default: PL)\n"
               << "      --n-restarts INT    Nelder-Mead restarts (default: " << config.n_restarts << ")\n"
@@ -79,6 +79,7 @@ static int run_relatedness(int argc, char* argv[]) {
         {"ld-window",  required_argument, nullptr, 1003},
         {"ld-step",    required_argument, nullptr, 1004},
         {"ld-r2",      required_argument, nullptr, 1005},
+        {"no-ld-prune", no_argument,       nullptr, 1013},
         {"gq-min",     required_argument, nullptr, 1006},
         {"pl-field",   required_argument, nullptr, 1012},
         {"n-restarts", required_argument, nullptr, 1007},
@@ -105,6 +106,7 @@ static int run_relatedness(int argc, char* argv[]) {
             case 1003: config.ld_config.window_size = std::atoi(optarg); break;
             case 1004: config.ld_config.step_size = std::atoi(optarg); break;
             case 1005: config.ld_config.r2_threshold = std::atof(optarg); break;
+            case 1013: config.ld_config.skip = true; break;
             case 1006: config.gq_min = std::atoi(optarg); break;
             case 1012: config.pl_field = optarg; break;
             case 1007: config.n_restarts = std::atoi(optarg); break;

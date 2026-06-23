@@ -59,10 +59,10 @@ configure_file(${HTSLIB_STAMP}.in ${HTSLIB_STAMP} COPYONLY)
 add_custom_command(
     OUTPUT  ${HTSLIB_A}
     COMMAND ${CMAKE_COMMAND} -E echo "Configuring htslib with: ${HTSLIB_CONFIGURE_FLAGS}"
-    COMMAND $(MAKE) distclean || true
+    COMMAND make distclean || true
     COMMAND autoreconf -i
     COMMAND ./configure ${HTSLIB_CONFIGURE_FLAGS}
-    COMMAND $(MAKE) -j${NPROC} libhts.a
+    COMMAND make -j${NPROC} libhts.a
     WORKING_DIRECTORY ${HTSLIB_DIR}
     DEPENDS ${HTSLIB_STAMP}
     COMMENT "Building htslib (parallel, j=${NPROC})"
