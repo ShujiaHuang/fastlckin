@@ -229,7 +229,12 @@ SampleA	SampleC	0.260000	0.490000	0.250000	0.495000	11987	First-degree
 
 ### Relationship classification (`--classify`)
 
-Based on PI_HAT and IBD coefficients (KING mapping):
+fastlckin classifies pairwise relationships using PI_HAT (π̂ = 0.5·k1 + k2)
+and IBD coefficients. The thresholds follow the log-scale midpoint scheme from
+KING (Manichaikul et al., 2010), but adapted to the PI_HAT convention
+(π̂ = 2φ, where φ is the kinship coefficient used by KING).
+
+#### fastlckin classification rules
 
 | PI_HAT range | Condition | Classification |
 | --- | --- | --- |
@@ -239,6 +244,30 @@ Based on PI_HAT and IBD coefficients (KING mapping):
 | [0.177, 0.354) | — | `Second-degree` |
 | [0.0884, 0.177) | — | `Third-degree` |
 | < 0.0884 | — | `Unrelated` |
+
+#### Comparison with KING thresholds
+
+KING uses the **kinship coefficient** φ, while fastlckin reports **PI_HAT**
+(π̂ = 0.5·k1 + k2 = 2φ). The numerical boundary values differ by a factor
+of 2 because of this scale difference, but they correspond to the same
+relationship categories.
+
+| Relationship | fastlckin<br>PI_HAT (= 2φ) | KING<br>φ (kinship) | Expected 2φ | Expected φ | Additional criterion |
+| --- | --- | --- | --- | --- | --- |
+| Duplicate / MZ | > 0.708 | > 0.354 | 1.0 | 0.5 | fastlckin: k2 > 0.8; KING: π₀ < 0.1 |
+| 1st degree (PO / FS) | [0.354, 0.708] | [0.177, 0.354] | 0.5 | 0.25 | PO vs FS: see below |
+| 2nd degree | [0.177, 0.354) | [0.0884, 0.177) | 0.25 | 0.125 | — |
+| 3rd degree | [0.0884, 0.177) | [0.0442, 0.0884) | 0.125 | 0.0625 | — |
+| Unrelated | < 0.0884 | < 0.0442 | 0 | 0 | — |
+
+#### Parent-Offspring vs Full-Sibling distinction
+
+| | fastlckin | KING |
+| --- | --- | --- |
+| Metric | k0 (probability of IBD = 0) | π₀ (proportion of zero-IBS SNPs) |
+| Parent-Offspring | k0 < 0.05 | π₀ < 0.1 |
+| Full-Sibling | k0 ≥ 0.05 | π₀ ∈ (0.1, 0.365) |
+| Rationale | Parent-offspring always share exactly one allele IBD at every locus (k0 = 0); full siblings may share 0, 1, or 2 alleles IBD (k0 ≈ 0.25) | Same principle using observed IBS = 0 proportion |
 
 ### Usage examples
 
