@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project(FASTLCKIN VERSION 0.2.0 LANGUAGES CXX)
+project(FASTLCKIN VERSION 0.3.0 LANGUAGES CXX)
 
 set(PROJECT_AUTHOR "Shujia Huang")
 set(PROJECT_DESCRIPTION "fastlckin: Fast Maximum Likelihood Kinship Estimation from Low-Coverage Sequencing Data")
