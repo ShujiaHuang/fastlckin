@@ -64,6 +64,15 @@ std::vector<GenotypeLikelihood> extract_genotype_likelihoods(
             }
 
             // PL → linear likelihood: 10^(-PL/10)
+            // Note: PL values in VCF are typically normalized so that
+            // min(PL) = 0 (GATK, Sentieon, bcftools convention). This
+            // means all likelihoods are scaled by a per-sample per-site
+            // constant C = 10^(min_PL_raw/10). This scaling is harmless:
+            // - EM AF estimation: C cancels in posterior normalization
+            // - Expected genotypes: C cancels in the same way
+            // - GLkin MLE: C adds a k-independent offset to log-likelihood,
+            //   which does not change the MLE of (k0, k1, k2)
+            // See handoff/v0.2.0_design.md Section 15 for full proof.
             gl.gl[0] = std::pow(10.0, -static_cast<double>(pl0) / 10.0);
             gl.gl[1] = std::pow(10.0, -static_cast<double>(pl1) / 10.0);
             gl.gl[2] = std::pow(10.0, -static_cast<double>(pl2) / 10.0);
