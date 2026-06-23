@@ -525,8 +525,6 @@ fastlckin is licensed under the
 
 ## Reference
 
-If you use fastlckin in your research, please cite:
 - <https://genome.sph.umich.edu/w/images/1/1f/666.2017.12_-_Kinship_Coefficients.pdf>
 - The original lcMLkin method: **Gazal et al. (2014)** *Bioinformatics*
 - Anderson & Weir (2007) IBS|IBD model: **Anderson & Weir (2007)** *Genetics*
-

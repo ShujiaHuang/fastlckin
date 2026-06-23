@@ -301,4 +301,26 @@ std::vector<int> ld_prune_from_likelihoods(
     return retained;
 }
 
+// Global LD pruning implementation (hard genotypes)
+std::vector<int> ld_prune_global(
+    const std::vector<std::vector<int8_t>>& genotypes,
+    const std::vector<bool>& global_mask,
+    const LDPruneConfig& config)
+{
+    // Global LD pruning uses the same algorithm as per-pair,
+    // but the mask is computed once for all samples
+    return ld_prune(genotypes, global_mask, config);
+}
+
+// Global LD pruning implementation (expected genotypes)
+std::vector<int> ld_prune_global_expected(
+    const std::vector<std::vector<double>>& expected_g,
+    const std::vector<bool>& global_mask,
+    const LDPruneConfig& config)
+{
+    // Global LD pruning uses the same algorithm as per-pair,
+    // but the mask is computed once for all samples
+    return ld_prune_from_likelihoods(expected_g, global_mask, config);
+}
+
 }  // namespace fastlckin

@@ -57,6 +57,29 @@ std::vector<int> ld_prune_from_likelihoods(
     const LDPruneConfig& config
 );
 
+/// Perform global LD pruning across all samples (v0.3.0 new feature).
+///
+/// This is more efficient than per-pair LD pruning: instead of running LD
+/// pruning for each sample pair independently, we run it once using all
+/// samples, then reuse the retained SNP set for all pairs.
+///
+/// @param genotypes     Genotype matrix [n_samples][n_snps] (int8_t or double)
+/// @param global_mask   Initial mask (true = already excluded for all samples)
+/// @param config        LD pruning parameters
+/// @param mode          "hard" for int8_t genotypes, "expected" for double
+/// @return Indices of globally retained SNPs
+std::vector<int> ld_prune_global(
+    const std::vector<std::vector<int8_t>>& genotypes,
+    const std::vector<bool>& global_mask,
+    const LDPruneConfig& config
+);
+
+std::vector<int> ld_prune_global_expected(
+    const std::vector<std::vector<double>>& expected_g,
+    const std::vector<bool>& global_mask,
+    const LDPruneConfig& config
+);
+
 }  // namespace fastlckin
 
 #endif

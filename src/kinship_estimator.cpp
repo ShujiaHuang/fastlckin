@@ -400,6 +400,14 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
         for (int s = 0; s < n_snps; ++s) {
             if (!mask[s]) retained.push_back(s);
         }
+    } else if (_config.global_ld_prune) {
+        // Use global LD-pruned SNPs (v0.3.0)
+        // Filter by pair-specific mask
+        for (int s : _global_ld_retained) {
+            if (!mask[s]) {
+                retained.push_back(s);
+            }
+        }
     } else if (_config.input_mode == InputMode::VCF_ONLY) {
         retained = ld_prune_from_likelihoods(_expected_genotypes, mask, _config.ld_config);
     } else {
@@ -577,6 +585,32 @@ std::vector<KinshipResult> KinshipEstimator::run() {
             case InputMode::PLINK_ONLY:
                 // _bed_genotypes already loaded in _load_plink_as_gl()
                 break;
+        }
+        
+        // Step 4.5: Global LD pruning (v0.3.0 new feature)
+        if (_config.global_ld_prune) {
+            if (_config.verbose) {
+                std::cerr << "[fastlckin] Performing global LD pruning (once for all samples)...\n";
+            }
+            
+            // Build global mask: SNP is masked if AF is masked
+            int n_snps = static_cast<int>(_snp_infos.size());
+            std::vector<bool> global_mask(n_snps, false);
+            for (int s = 0; s < n_snps; ++s) {
+                global_mask[s] = _snp_infos[s].af_masked;
+            }
+            
+            // Perform global LD pruning
+            if (_config.input_mode == InputMode::VCF_ONLY) {
+                _global_ld_retained = ld_prune_global_expected(_expected_genotypes, global_mask, _config.ld_config);
+            } else {
+                _global_ld_retained = ld_prune_global(_bed_genotypes, global_mask, _config.ld_config);
+            }
+            
+            if (_config.verbose) {
+                std::cerr << "[fastlckin]   Global LD pruning: " << _global_ld_retained.size()
+                          << " SNPs retained from " << n_snps << " total\n";
+            }
         }
     } else {
         if (_config.verbose) {

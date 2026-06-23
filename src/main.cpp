@@ -79,7 +79,7 @@ static int run_relatedness(int argc, char* argv[]) {
         {"ld-window",  required_argument, nullptr, 1003},
         {"ld-step",    required_argument, nullptr, 1004},
         {"ld-r2",      required_argument, nullptr, 1005},
-        {"no-ld-prune", no_argument,       nullptr, 1013},
+        {"no-ld-prune", no_argument,      nullptr, 1013},
         {"gq-min",     required_argument, nullptr, 1006},
         {"pl-field",   required_argument, nullptr, 1012},
         {"n-restarts", required_argument, nullptr, 1007},

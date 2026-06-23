@@ -69,12 +69,13 @@ struct KinshipConfig {
     double maf_min = 0.05;
     double maf_max = 0.95;
     int gq_min = 1;
-    int n_restarts = 3;
+    int n_restarts = 5;           ///< Increased from 3 in v0.3.0 for better global optimum search
     bool classify = false;
     bool verbose = false;
 
     // LD pruning parameters
     LDPruneConfig ld_config;
+    bool global_ld_prune = false;   ///< If true, use global LD pruning (v0.3.0)
 
     // Optimizer parameters
     NelderMeadConfig nm_config;
@@ -102,6 +103,7 @@ private:
     IBS_IBD_Matrix _ibs_ibd;                   ///< [9][snp][3]
     std::vector<std::vector<int8_t>> _bed_genotypes; ///< [sample][snp] for LD (Mode 2/3)
     std::vector<std::vector<double>> _expected_genotypes; ///< [sample][snp] for LD (Mode 1)
+    std::vector<int> _global_ld_retained;      ///< Global LD-pruned SNP indices (v0.3.0)
 
     // Mapping: VCF SNP index → .bim SNP index (Mode 2 only)
     std::vector<int> _vcf_to_bim_index;

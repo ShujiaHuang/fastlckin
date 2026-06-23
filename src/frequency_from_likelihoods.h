@@ -37,6 +37,25 @@ std::vector<double> compute_af_from_likelihoods(
     bool verbose = false
 );
 
+/// Estimate allele frequencies excluding specified samples (leave-one-out for pair).
+///
+/// This eliminates the bias where related individuals' shared alleles are
+/// over-counted in the frequency estimate, which then affects IBD estimation.
+///
+/// @param lk_matrix        [sample][snp] GenotypeLikelihood
+/// @param exclude_indices  Sample indices to exclude (typically a pair: ind1, ind2)
+/// @param max_iter         Maximum EM iterations per SNP (default: 100)
+/// @param tol              Convergence threshold (default: 1e-6)
+/// @param verbose          Print convergence info (default: false)
+/// @return Vector of alt allele frequencies, one per SNP
+std::vector<double> compute_af_from_likelihoods_leave_one_out(
+    const LikelihoodMatrix& lk_matrix,
+    const std::vector<int>& exclude_indices,
+    int max_iter = 100,
+    double tol = 1e-6,
+    bool verbose = false
+);
+
 /// Compute posterior expected genotypes given likelihoods and allele frequencies.
 ///
 /// For each sample i at SNP s:
