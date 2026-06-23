@@ -1,27 +1,25 @@
 /**
- * @file frequency_from_gl.cpp
+ * @file frequency_from_likelihoods.cpp
  * @brief EM algorithm for allele frequency estimation from genotype likelihoods
- * @author Shujia Huang
- * @date 2025-06-23
  */
 
-#include "frequency_from_gl.h"
+#include "frequency_from_likelihoods.h"
 #include <iostream>
 #include <cmath>
 #include <algorithm>
 
 namespace fastlckin {
 
-std::vector<double> compute_af_from_gl(
-    const GLMatrix& gl_matrix,
+std::vector<double> compute_af_from_likelihoods(
+    const LikelihoodMatrix& lk_matrix,
     int max_iter,
     double tol,
     bool verbose)
 {
-    if (gl_matrix.empty()) return {};
+    if (lk_matrix.empty()) return {};
 
-    int n_samples = static_cast<int>(gl_matrix.size());
-    int n_snps = static_cast<int>(gl_matrix[0].size());
+    int n_samples = static_cast<int>(lk_matrix.size());
+    int n_snps = static_cast<int>(lk_matrix[0].size());
 
     std::vector<double> afs(n_snps, 0.0);
 
@@ -40,13 +38,13 @@ std::vector<double> compute_af_from_gl(
             double prior[3] = {q * q, 2.0 * p * q, p * p};
 
             for (int i = 0; i < n_samples; ++i) {
-                const auto& gl = gl_matrix[i][s];
-                if (gl.masked) continue;
+                const auto& lk = lk_matrix[i][s];
+                if (lk.masked) continue;
 
                 // Posterior ∝ likelihood × prior
-                double post0 = gl.gl[0] * prior[0];
-                double post1 = gl.gl[1] * prior[1];
-                double post2 = gl.gl[2] * prior[2];
+                double post0 = lk.gl[0] * prior[0];
+                double post1 = lk.gl[1] * prior[1];
+                double post2 = lk.gl[2] * prior[2];
                 double total = post0 + post1 + post2;
 
                 if (total <= 0.0) continue;
@@ -85,13 +83,13 @@ std::vector<double> compute_af_from_gl(
 }
 
 std::vector<std::vector<double>> compute_expected_genotypes(
-    const GLMatrix& gl_matrix,
+    const LikelihoodMatrix& lk_matrix,
     const std::vector<double>& afs)
 {
-    if (gl_matrix.empty()) return {};
+    if (lk_matrix.empty()) return {};
 
-    int n_samples = static_cast<int>(gl_matrix.size());
-    int n_snps = static_cast<int>(gl_matrix[0].size());
+    int n_samples = static_cast<int>(lk_matrix.size());
+    int n_snps = static_cast<int>(lk_matrix[0].size());
 
     std::vector<std::vector<double>> expected_g(
         n_samples, std::vector<double>(n_snps, -1.0));
@@ -102,12 +100,12 @@ std::vector<std::vector<double>> compute_expected_genotypes(
         double prior[3] = {q * q, 2.0 * p * q, p * p};
 
         for (int i = 0; i < n_samples; ++i) {
-            const auto& gl = gl_matrix[i][s];
-            if (gl.masked) continue;
+            const auto& lk = lk_matrix[i][s];
+            if (lk.masked) continue;
 
-            double post0 = gl.gl[0] * prior[0];
-            double post1 = gl.gl[1] * prior[1];
-            double post2 = gl.gl[2] * prior[2];
+            double post0 = lk.gl[0] * prior[0];
+            double post1 = lk.gl[1] * prior[1];
+            double post2 = lk.gl[2] * prior[2];
             double total = post0 + post1 + post2;
 
             if (total <= 0.0) continue;

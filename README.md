@@ -10,10 +10,16 @@
 
 ***fastlckin*** is a cross-platform, high-performance C++ tool for estimating
 pairwise **kinship coefficients** (IBD sharing: k0, k1, k2) from **low-coverage
-sequencing data** using genotype likelihoods (GL/PL). It implements the
+sequencing data** using genotype likelihoods. It implements the
 Anderson & Weir (2007) IBS|IBD conditional probability model with FST
 correction and uses Nelder-Mead maximum likelihood optimization — all without
 requiring hard genotype calls.
+
+> **Note on terminology:** "Genotype likelihood" in fastlckin refers to the
+> general concept P(Data|Genotype), regardless of the VCF FORMAT field used.
+> By default, the **PL** (Phred-scaled) field is preferred because it is more
+> commonly available (e.g., GATK, DeepVariant). The GL (log10-scaled) field
+> is used as a fallback. Use `--pl-field` to specify a custom field name.
 
 fastlckin is built on top of [htslib](https://github.com/samtools/htslib)
 (vendored as a git submodule) and uses multi-threaded processing via an
@@ -218,6 +224,7 @@ Optional:
       --ld-step INT       LD pruning step size (default: 5)
       --ld-r2 FLOAT       LD pruning r2 threshold (default: 0.5)
       --gq-min INT        Min GQ quality threshold (default: 1)
+      --pl-field STR      VCF FORMAT field for Phred-scaled GL (default: PL)
       --n-restarts INT    Nelder-Mead restarts (default: 3)
       --xtol FLOAT        Optimizer parameter convergence (default: 0.01)
       --ftol FLOAT        Optimizer function convergence (default: 0.01)
@@ -400,10 +407,11 @@ fastlckin freq \
 
 fastlckin implements the **GLkin** maximum likelihood framework:
 
-1. **Genotype Likelihood Extraction** — Reads PL (Phred-scaled) or GL
-   (log10-scaled) fields from VCF, converting to linear-scale likelihoods.
-   PL is preferred when available. In PLINK-only mode, hard genotypes are
-   treated as delta-function likelihoods.
+1. **Genotype Likelihood Extraction** — Reads Phred-scaled genotype
+   likelihoods from VCF (default field: PL; fallback: GL). The FORMAT field
+   name is configurable via `--pl-field`. Values are converted to linear-scale
+   likelihoods P(Data|G). In PLINK-only mode, hard genotypes are treated as
+   delta-function likelihoods.
 
 2. **Allele Frequency Estimation** — In VCF+PLINK and PLINK-only modes,
    frequencies are computed by counting alleles from `.bed` hard genotypes.
@@ -433,8 +441,10 @@ fastlckin implements the **GLkin** maximum likelihood framework:
 ## Tips and best practices
 
 - **PL over GL**: VCF files with PL fields are preferred — PL (Phred-scaled)
-  is unambiguous and more commonly available. GL (log10-scaled) is used as
-  fallback.
+  is unambiguous and more commonly available (GATK, DeepVariant, etc.).
+  GL (log10-scaled) is used as fallback. If your VCF uses a non-standard
+  FORMAT field name for Phred-scaled genotype likelihoods, use
+  `--pl-field <NAME>` to specify it.
 - **Mode selection**: Use VCF-only mode when you only have a VCF. Use
   VCF+PLINK when a reference panel is available (more accurate frequencies).
   Use PLINK-only for SNP array data or high-coverage sequencing.

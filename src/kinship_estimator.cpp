@@ -7,7 +7,7 @@
 
 #include "kinship_estimator.h"
 #include "frequency.h"
-#include "frequency_from_gl.h"
+#include "frequency_from_likelihoods.h"
 #include "algorithm.h"
 #include "version.h"
 #include "external/thread_pool.h"
@@ -62,7 +62,7 @@ void KinshipEstimator::_load_vcf() {
     int total_records = 0;
     int kept_records = 0;
 
-    std::vector<std::vector<GenotypeLikelihoods>> snp_gls;
+    std::vector<std::vector<GenotypeLikelihood>> snp_gls;
 
     while (vcf.read(rec) >= 0) {
         rec.unpack(BCF_UN_FMT);
@@ -83,7 +83,7 @@ void KinshipEstimator::_load_vcf() {
         auto it = bim_lookup.find(key);
         if (it == bim_lookup.end()) continue;
 
-        auto gls = extract_genotype_likelihoods(rec, hdr, n_samples, _config.gq_min);
+        auto gls = extract_genotype_likelihoods(rec, hdr, n_samples, _config.gq_min, _config.pl_field);
 
         SNPInfo si;
         si.chrom = chrom;
@@ -107,7 +107,7 @@ void KinshipEstimator::_load_vcf() {
 
     // Transpose to [sample][snp]
     int n_snps = static_cast<int>(_snp_infos.size());
-    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihoods>(n_snps));
+    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihood>(n_snps));
     for (int s = 0; s < n_snps; ++s) {
         for (int i = 0; i < n_samples; ++i) {
             _gl_matrix[i][s] = snp_gls[s][i];
@@ -130,7 +130,7 @@ void KinshipEstimator::_load_vcf_only() {
     int total_records = 0;
     int kept_records = 0;
 
-    std::vector<std::vector<GenotypeLikelihoods>> snp_gls;
+    std::vector<std::vector<GenotypeLikelihood>> snp_gls;
 
     while (vcf.read(rec) >= 0) {
         rec.unpack(BCF_UN_FMT);
@@ -146,7 +146,7 @@ void KinshipEstimator::_load_vcf_only() {
         hts_pos_t pos = rec.pos();
         std::string alt = alts[0];
 
-        auto gls = extract_genotype_likelihoods(rec, hdr, n_samples, _config.gq_min);
+        auto gls = extract_genotype_likelihoods(rec, hdr, n_samples, _config.gq_min, _config.pl_field);
 
         SNPInfo si;
         si.chrom = chrom;
@@ -169,7 +169,7 @@ void KinshipEstimator::_load_vcf_only() {
 
     // Transpose to [sample][snp]
     int n_snps = static_cast<int>(_snp_infos.size());
-    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihoods>(n_snps));
+    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihood>(n_snps));
     for (int s = 0; s < n_snps; ++s) {
         for (int i = 0; i < n_samples; ++i) {
             _gl_matrix[i][s] = snp_gls[s][i];
@@ -212,7 +212,7 @@ void KinshipEstimator::_load_plink_as_gl() {
 
     // Convert hard genotypes to delta-function GL
     const double EPS = 1e-10;
-    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihoods>(n_snps));
+    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihood>(n_snps));
 
     for (int i = 0; i < n_samples; ++i) {
         for (int s = 0; s < n_snps; ++s) {
@@ -277,10 +277,10 @@ void KinshipEstimator::_load_frequencies() {
     }
 }
 
-void KinshipEstimator::_compute_af_from_gl() {
-    if (_config.verbose) std::cerr << "[fastlckin] Computing allele frequencies from GL (EM algorithm)...\n";
+void KinshipEstimator::_compute_af_from_likelihoods() {
+    if (_config.verbose) std::cerr << "[fastlckin] Computing allele frequencies from genotype likelihoods (EM algorithm)...\n";
 
-    auto freqs = compute_af_from_gl(_gl_matrix, 100, 1e-6, _config.verbose);
+    auto freqs = compute_af_from_likelihoods(_gl_matrix, 100, 1e-6, _config.verbose);
 
     // Apply MAF filter and assign frequencies
     int n_masked = 0;
@@ -395,7 +395,7 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     // LD pruning (mode-dependent)
     std::vector<int> retained;
     if (_config.input_mode == InputMode::VCF_ONLY) {
-        retained = ld_prune_from_gl(_expected_genotypes, mask, _config.ld_config);
+        retained = ld_prune_from_likelihoods(_expected_genotypes, mask, _config.ld_config);
     } else {
         retained = ld_prune(_bed_genotypes, mask, _config.ld_config);
     }
@@ -544,7 +544,7 @@ std::vector<KinshipResult> KinshipEstimator::run() {
     // Step 2: Load/compute frequencies (mode-dependent)
     switch (_config.input_mode) {
         case InputMode::VCF_ONLY:
-            _compute_af_from_gl();
+            _compute_af_from_likelihoods();
             break;
         case InputMode::VCF_PLINK:
             _load_frequencies();

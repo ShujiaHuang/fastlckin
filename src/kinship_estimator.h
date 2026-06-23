@@ -58,6 +58,9 @@ struct KinshipConfig {
     std::string freq_path;    ///< Optional pre-computed .frq
     std::string output_path;
 
+    // VCF FORMAT field for Phred-scaled genotype likelihoods (default: PL)
+    std::string pl_field = "PL";
+
     // Input mode (auto-detected from provided files)
     InputMode input_mode = InputMode::VCF_PLINK;
 
@@ -95,7 +98,7 @@ private:
     // Internal data
     std::vector<std::string> _sample_names;
     std::vector<SNPInfo> _snp_infos;          ///< VCF SNPs (filtered biallelic)
-    GLMatrix _gl_matrix;                       ///< [sample][snp]
+    LikelihoodMatrix _gl_matrix;                ///< [sample][snp] genotype likelihoods
     IBS_IBD_Matrix _ibs_ibd;                   ///< [9][snp][3]
     std::vector<std::vector<int8_t>> _bed_genotypes; ///< [sample][snp] for LD (Mode 2/3)
     std::vector<std::vector<double>> _expected_genotypes; ///< [sample][snp] for LD (Mode 1)
@@ -106,11 +109,11 @@ private:
     // Internal steps — Mode-dependent loading
     void _load_vcf();           ///< Mode 2: VCF with .bim whitelist
     void _load_vcf_only();      ///< Mode 1: VCF without .bim filter
-    void _load_plink_as_gl();   ///< Mode 3: .bed → delta-function GL
+    void _load_plink_as_gl();   ///< Mode 3: .bed → delta-function likelihoods
 
     // Internal steps — common
     void _load_frequencies();       ///< Mode 2: AF from .bed (or .frq)
-    void _compute_af_from_gl();     ///< Mode 1: AF via EM from GL
+    void _compute_af_from_likelihoods(); ///< Mode 1: AF via EM from likelihoods
     void _compute_af_from_bed();    ///< Mode 3: AF from .bed directly
     void _precompute_ibs_ibd();     ///< All modes
     void _load_bed_genotypes();     ///< Mode 2: .bed for LD pruning

@@ -1,14 +1,12 @@
-#ifndef _FASTLCKIN_FREQUENCY_FROM_GL_H_
-#define _FASTLCKIN_FREQUENCY_FROM_GL_H_
+#ifndef _FASTLCKIN_FREQUENCY_FROM_LIKELIHOODS_H_
+#define _FASTLCKIN_FREQUENCY_FROM_LIKELIHOODS_H_
 
 /**
- * @file frequency_from_gl.h
+ * @file frequency_from_likelihoods.h
  * @brief Allele frequency estimation from genotype likelihoods via EM algorithm
- * @author Shujia Huang
- * @date 2025-06-23
  *
  * For VCF-only mode (Mode 1): when no PLINK files are available, allele
- * frequencies are estimated directly from genotype likelihoods (GL/PL)
+ * frequencies are estimated directly from genotype likelihoods (PL/GL)
  * using an Expectation-Maximization (EM) algorithm with a Hardy-Weinberg
  * prior.
  *
@@ -27,19 +25,19 @@ namespace fastlckin {
 
 /// Estimate allele frequencies from genotype likelihoods using EM.
 ///
-/// @param gl_matrix   [sample][snp] GenotypeLikelihoods (linear-scale P(D|G))
-/// @param max_iter    Maximum EM iterations per SNP (default: 100)
-/// @param tol         Convergence threshold |p_new - p_old| (default: 1e-6)
-/// @param verbose     Print convergence info (default: false)
+/// @param lk_matrix    [sample][snp] GenotypeLikelihood (linear-scale P(D|G))
+/// @param max_iter     Maximum EM iterations per SNP (default: 100)
+/// @param tol          Convergence threshold |p_new - p_old| (default: 1e-6)
+/// @param verbose      Print convergence info (default: false)
 /// @return Vector of alt allele frequencies, one per SNP
-std::vector<double> compute_af_from_gl(
-    const GLMatrix& gl_matrix,
+std::vector<double> compute_af_from_likelihoods(
+    const LikelihoodMatrix& lk_matrix,
     int max_iter = 100,
     double tol = 1e-6,
     bool verbose = false
 );
 
-/// Compute posterior expected genotypes given GL and allele frequencies.
+/// Compute posterior expected genotypes given likelihoods and allele frequencies.
 ///
 /// For each sample i at SNP s:
 ///   E[G_is] = P(G=1|D_i,p) + 2 * P(G=2|D_i,p)
@@ -47,11 +45,11 @@ std::vector<double> compute_af_from_gl(
 /// where the posterior uses the Hardy-Weinberg prior with the given AF.
 /// Masked samples get expected_g[i][s] = -1.0 (missing sentinel).
 ///
-/// @param gl_matrix   [sample][snp] GenotypeLikelihoods
-/// @param afs         Alt allele frequency for each SNP
+/// @param lk_matrix    [sample][snp] GenotypeLikelihood
+/// @param afs          Alt allele frequency for each SNP
 /// @return Expected genotype matrix [sample][snp], -1.0 for masked
 std::vector<std::vector<double>> compute_expected_genotypes(
-    const GLMatrix& gl_matrix,
+    const LikelihoodMatrix& lk_matrix,
     const std::vector<double>& afs
 );
 

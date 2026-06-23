@@ -206,7 +206,7 @@ static std::vector<double> get_snp_column_double(
     return result;
 }
 
-std::vector<int> ld_prune_from_gl(
+std::vector<int> ld_prune_from_likelihoods(
     const std::vector<std::vector<double>>& expected_g,
     const std::vector<bool>& mask,
     const LDPruneConfig& config)

@@ -54,6 +54,7 @@ static int relatedness_usage(const fastlckin::KinshipConfig &config) {
               << "      --ld-step INT       LD pruning step size (default: " << config.ld_config.step_size << ")\n"
               << "      --ld-r2 FLOAT       LD pruning r2 threshold (default: " << config.ld_config.r2_threshold << ")\n"
               << "      --gq-min INT        Min GQ quality threshold (default: " << config.gq_min << ")\n"
+              << "      --pl-field STR      VCF FORMAT field for Phred-scaled GL (default: PL)\n"
               << "      --n-restarts INT    Nelder-Mead restarts (default: " << config.n_restarts << ")\n"
               << "      --xtol FLOAT        Optimizer parameter convergence (default: " << config.nm_config.xtol << ")\n"
               << "      --ftol FLOAT        Optimizer function convergence (default: " << config.nm_config.ftol << ")\n"
@@ -79,6 +80,7 @@ static int run_relatedness(int argc, char* argv[]) {
         {"ld-step",    required_argument, nullptr, 1004},
         {"ld-r2",      required_argument, nullptr, 1005},
         {"gq-min",     required_argument, nullptr, 1006},
+        {"pl-field",   required_argument, nullptr, 1012},
         {"n-restarts", required_argument, nullptr, 1007},
         {"xtol",       required_argument, nullptr, 1008},
         {"ftol",       required_argument, nullptr, 1009},
@@ -104,6 +106,7 @@ static int run_relatedness(int argc, char* argv[]) {
             case 1004: config.ld_config.step_size = std::atoi(optarg); break;
             case 1005: config.ld_config.r2_threshold = std::atof(optarg); break;
             case 1006: config.gq_min = std::atoi(optarg); break;
+            case 1012: config.pl_field = optarg; break;
             case 1007: config.n_restarts = std::atoi(optarg); break;
             case 1008: config.nm_config.xtol = std::atof(optarg); break;
             case 1009: config.nm_config.ftol = std::atof(optarg); break;

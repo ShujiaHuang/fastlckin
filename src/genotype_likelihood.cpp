@@ -1,8 +1,6 @@
 /**
  * @file genotype_likelihood.cpp
- * @brief GL/PL extraction and quality control implementation
- * @author Shujia Huang
- * @date 2025-06-23
+ * @brief Genotype likelihood extraction and quality control implementation
  */
 
 #include "genotype_likelihood.h"
@@ -12,19 +10,20 @@
 
 namespace fastlckin {
 
-std::vector<GenotypeLikelihoods> extract_genotype_likelihoods(
+std::vector<GenotypeLikelihood> extract_genotype_likelihoods(
     const ngslib::VCFRecord& rec,
     const ngslib::VCFHeader& hdr,
     int n_samples,
-    int gq_min)
+    int gq_min,
+    const std::string& pl_field)
 {
-    std::vector<GenotypeLikelihoods> result(n_samples);
+    std::vector<GenotypeLikelihood> result(n_samples);
 
-    // Try PL first (integer Phred-scale)
+    // Try the specified Phred-scaled field first (default: PL)
     std::vector<int32_t> pl_values;
-    int pl_per_sample = rec.get_format_int(hdr, "PL", pl_values);
+    int pl_per_sample = rec.get_format_int(hdr, pl_field.c_str(), pl_values);
 
-    // Try GL (float log10-scale)
+    // Try GL (float log10-scale) as fallback
     std::vector<float> gl_values;
     int gl_per_sample = 0;
     if (pl_per_sample < 3) {

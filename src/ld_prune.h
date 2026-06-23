@@ -43,14 +43,14 @@ std::vector<int> ld_prune(
     const LDPruneConfig& config
 );
 
-/// Perform LD pruning using expected (continuous) genotypes from GL.
-/// Same sliding-window iterative pruning as ld_prune(), but uses
-/// Pearson r² computed from posterior expected genotypes.
+/// Perform LD pruning using expected (continuous) genotypes from genotype
+/// likelihoods (VCF-only mode). Same sliding-window iterative pruning as
+/// ld_prune(), but uses Pearson r² computed from posterior expected genotypes.
 /// @param expected_g  Expected genotype matrix [n_samples][n_snps] (-1.0=missing)
 /// @param mask        Initial mask (true = already excluded)
 /// @param config      LD pruning parameters
 /// @return Indices of retained SNPs
-std::vector<int> ld_prune_from_gl(
+std::vector<int> ld_prune_from_likelihoods(
     const std::vector<std::vector<double>>& expected_g,
     const std::vector<bool>& mask,
     const LDPruneConfig& config

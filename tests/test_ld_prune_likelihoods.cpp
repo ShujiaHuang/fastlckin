@@ -1,6 +1,6 @@
 /**
- * @file test_ld_prune_gl.cpp
- * @brief Unit tests for GL-based LD pruning (expected genotype r²)
+ * @file test_ld_prune_likelihoods.cpp
+ * @brief Unit tests for likelihood-based LD pruning (expected genotype r²)
  */
 
 #include "test_harness.h"
@@ -73,7 +73,7 @@ TEST_CASE(r2_expected_matches_hard_high_coverage) {
     CHECK_NEAR(r2_hard, r2_soft, 1e-6);
 }
 
-TEST_CASE(ld_prune_from_gl_independent) {
+TEST_CASE(ld_prune_from_likelihoods_independent) {
     // Independent SNPs should all be retained
     int n_samples = 30;
     int n_snps = 10;
@@ -90,11 +90,11 @@ TEST_CASE(ld_prune_from_gl_independent) {
     config.window_size = 50;
     config.r2_threshold = 0.8;
 
-    auto retained = fastlckin::ld_prune_from_gl(expected_g, mask, config);
+    auto retained = fastlckin::ld_prune_from_likelihoods(expected_g, mask, config);
     CHECK(static_cast<int>(retained.size()) == n_snps);
 }
 
-TEST_CASE(ld_prune_from_gl_removes_high_ld) {
+TEST_CASE(ld_prune_from_likelihoods_removes_high_ld) {
     // Two identical SNPs + one independent
     int n_samples = 30;
     std::mt19937 rng(42);
@@ -113,25 +113,25 @@ TEST_CASE(ld_prune_from_gl_removes_high_ld) {
     config.window_size = 50;
     config.r2_threshold = 0.8;
 
-    auto retained = fastlckin::ld_prune_from_gl(expected_g, mask, config);
+    auto retained = fastlckin::ld_prune_from_likelihoods(expected_g, mask, config);
     CHECK(retained.size() == 2);
 }
 
-TEST_CASE(ld_prune_from_gl_all_masked) {
+TEST_CASE(ld_prune_from_likelihoods_all_masked) {
     std::vector<std::vector<double>> expected_g(10, std::vector<double>(5, 0.5));
     std::vector<bool> mask(5, true);
 
     fastlckin::LDPruneConfig config;
-    auto retained = fastlckin::ld_prune_from_gl(expected_g, mask, config);
+    auto retained = fastlckin::ld_prune_from_likelihoods(expected_g, mask, config);
     CHECK(retained.empty());
 }
 
-TEST_CASE(ld_prune_from_gl_empty) {
+TEST_CASE(ld_prune_from_likelihoods_empty) {
     std::vector<std::vector<double>> expected_g;
     std::vector<bool> mask;
 
     fastlckin::LDPruneConfig config;
-    auto retained = fastlckin::ld_prune_from_gl(expected_g, mask, config);
+    auto retained = fastlckin::ld_prune_from_likelihoods(expected_g, mask, config);
     CHECK(retained.empty());
 }
 
