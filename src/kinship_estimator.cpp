@@ -7,6 +7,7 @@
 
 #include "kinship_estimator.h"
 #include "frequency.h"
+#include "frequency_from_gl.h"
 #include "algorithm.h"
 #include "version.h"
 #include "external/thread_pool.h"
@@ -52,7 +53,6 @@ void KinshipEstimator::_load_vcf() {
     auto bim_snps = load_bim_snps(bim_path);
     std::map<std::string, int> bim_lookup;
     for (int i = 0; i < static_cast<int>(bim_snps.size()); ++i) {
-        // .bim pos is 1-based; we use 1-based key for matching with VCF
         std::string key = bim_snps[i].chrom + "_" + std::to_string(bim_snps[i].pos);
         bim_lookup[key] = i;
     }
@@ -62,7 +62,6 @@ void KinshipEstimator::_load_vcf() {
     int total_records = 0;
     int kept_records = 0;
 
-    // Temporary: accumulate GL per SNP, then transpose later
     std::vector<std::vector<GenotypeLikelihoods>> snp_gls;
 
     while (vcf.read(rec) >= 0) {
@@ -84,13 +83,12 @@ void KinshipEstimator::_load_vcf() {
         auto it = bim_lookup.find(key);
         if (it == bim_lookup.end()) continue;
 
-        // Extract GL/PL
         auto gls = extract_genotype_likelihoods(rec, hdr, n_samples, _config.gq_min);
 
         SNPInfo si;
         si.chrom = chrom;
-        si.pos = pos;           // Store 0-based internally
-        si.id = key;            // 1-based ID to match .bim
+        si.pos = pos;
+        si.id = key;
         si.ref = ref;
         si.alt = alt;
         si.af = 0.0;
@@ -117,6 +115,130 @@ void KinshipEstimator::_load_vcf() {
     }
 }
 
+void KinshipEstimator::_load_vcf_only() {
+    if (_config.verbose) std::cerr << "[fastlckin] Loading VCF (VCF-only mode): " << _config.vcf_path << "\n";
+
+    ngslib::VCFFile vcf(_config.vcf_path, "r");
+    auto& hdr = vcf.header();
+    _sample_names = hdr.sample_names();
+    int n_samples = static_cast<int>(_sample_names.size());
+
+    if (_config.verbose) std::cerr << "[fastlckin]   " << n_samples << " samples found\n";
+
+    // Stream-read ALL biallelic VCF records (no .bim filter)
+    ngslib::VCFRecord rec;
+    int total_records = 0;
+    int kept_records = 0;
+
+    std::vector<std::vector<GenotypeLikelihoods>> snp_gls;
+
+    while (vcf.read(rec) >= 0) {
+        rec.unpack(BCF_UN_FMT);
+        ++total_records;
+
+        // Filter: biallelic, single-base
+        if (rec.n_alt() != 1) continue;
+        std::string ref = rec.ref();
+        auto alts = rec.alt();
+        if (ref.size() != 1 || alts.empty() || alts[0].size() != 1) continue;
+
+        std::string chrom = rec.chrom(hdr);
+        hts_pos_t pos = rec.pos();
+        std::string alt = alts[0];
+
+        auto gls = extract_genotype_likelihoods(rec, hdr, n_samples, _config.gq_min);
+
+        SNPInfo si;
+        si.chrom = chrom;
+        si.pos = pos;
+        si.id = chrom + "_" + std::to_string(pos + 1);
+        si.ref = ref;
+        si.alt = alt;
+        si.af = 0.0;
+        si.af_masked = false;
+
+        _snp_infos.push_back(std::move(si));
+        snp_gls.push_back(std::move(gls));
+        ++kept_records;
+    }
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   Read " << total_records << " records, kept "
+                  << kept_records << " biallelic SNPs\n";
+    }
+
+    // Transpose to [sample][snp]
+    int n_snps = static_cast<int>(_snp_infos.size());
+    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihoods>(n_snps));
+    for (int s = 0; s < n_snps; ++s) {
+        for (int i = 0; i < n_samples; ++i) {
+            _gl_matrix[i][s] = snp_gls[s][i];
+        }
+    }
+}
+
+void KinshipEstimator::_load_plink_as_gl() {
+    if (_config.verbose) std::cerr << "[fastlckin] Loading PLINK (PLINK-only mode): " << _config.plink_prefix << "\n";
+
+    std::string bed_path = _config.plink_prefix + ".bed";
+    std::string bim_path = _config.plink_prefix + ".bim";
+    std::string fam_path = _config.plink_prefix + ".fam";
+
+    // Load sample names from .fam
+    {
+        std::ifstream ifs(fam_path);
+        if (!ifs) throw std::runtime_error("Cannot open .fam file: " + fam_path);
+        std::string line;
+        while (std::getline(ifs, line)) {
+            if (line.empty()) continue;
+            std::istringstream iss(line);
+            std::string fam_id, sample_id;
+            iss >> fam_id >> sample_id;
+            _sample_names.push_back(sample_id);
+        }
+    }
+    int n_samples = static_cast<int>(_sample_names.size());
+    if (_config.verbose) std::cerr << "[fastlckin]   " << n_samples << " samples found\n";
+
+    // Load SNP metadata from .bim
+    _snp_infos = load_bim_snps(bim_path);
+    int n_snps = static_cast<int>(_snp_infos.size());
+    if (_config.verbose) std::cerr << "[fastlckin]   " << n_snps << " SNPs in .bim\n";
+
+    // Load hard genotypes from .bed
+    std::vector<int> all_indices(n_snps);
+    for (int i = 0; i < n_snps; ++i) all_indices[i] = i;
+    _bed_genotypes = read_bed_genotypes(bed_path, bim_path, all_indices);
+
+    // Convert hard genotypes to delta-function GL
+    const double EPS = 1e-10;
+    _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihoods>(n_snps));
+
+    for (int i = 0; i < n_samples; ++i) {
+        for (int s = 0; s < n_snps; ++s) {
+            int8_t g = _bed_genotypes[i][s];
+            if (g < 0) {
+                // Missing genotype
+                _gl_matrix[i][s].masked = true;
+                _gl_matrix[i][s].gl[0] = EPS;
+                _gl_matrix[i][s].gl[1] = EPS;
+                _gl_matrix[i][s].gl[2] = EPS;
+            } else {
+                // Delta-function: observed genotype has likelihood 1
+                _gl_matrix[i][s].gl[0] = EPS;
+                _gl_matrix[i][s].gl[1] = EPS;
+                _gl_matrix[i][s].gl[2] = EPS;
+                _gl_matrix[i][s].gl[g] = 1.0;
+                _gl_matrix[i][s].masked = false;
+            }
+        }
+    }
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   Converted " << n_snps << " SNPs to delta-function GL\n";
+    }
+}
+
 void KinshipEstimator::_load_frequencies() {
     if (_config.verbose) std::cerr << "[fastlckin] Loading allele frequencies...\n";
 
@@ -126,12 +248,75 @@ void KinshipEstimator::_load_frequencies() {
     std::vector<double> freqs;
 
     if (!_config.freq_path.empty()) {
-        // Read from pre-computed .frq
         freqs = read_plink_freq(_config.freq_path, _snp_infos);
     } else {
-        // Compute from .bed for the matched SNPs
         freqs = compute_allele_frequencies(bed_path, bim_path, _vcf_to_bim_index);
     }
+
+    // Apply MAF filter and assign frequencies
+    int n_masked = 0;
+    for (size_t i = 0; i < _snp_infos.size(); ++i) {
+        double af = (i < freqs.size()) ? freqs[i] : -1.0;
+        if (af < 0.0 || af > 1.0) {
+            _snp_infos[i].af_masked = true;
+            ++n_masked;
+            continue;
+        }
+        _snp_infos[i].af = af;
+
+        double maf = std::min(af, 1.0 - af);
+        if (maf < _config.maf_min || maf > _config.maf_max) {
+            _snp_infos[i].af_masked = true;
+            ++n_masked;
+        }
+    }
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   " << (_snp_infos.size() - n_masked) << " SNPs passed MAF filter, "
+                  << n_masked << " masked\n";
+    }
+}
+
+void KinshipEstimator::_compute_af_from_gl() {
+    if (_config.verbose) std::cerr << "[fastlckin] Computing allele frequencies from GL (EM algorithm)...\n";
+
+    auto freqs = compute_af_from_gl(_gl_matrix, 100, 1e-6, _config.verbose);
+
+    // Apply MAF filter and assign frequencies
+    int n_masked = 0;
+    for (size_t i = 0; i < _snp_infos.size(); ++i) {
+        double af = (i < freqs.size()) ? freqs[i] : -1.0;
+        if (af < 0.0 || af > 1.0) {
+            _snp_infos[i].af_masked = true;
+            ++n_masked;
+            continue;
+        }
+        _snp_infos[i].af = af;
+
+        double maf = std::min(af, 1.0 - af);
+        if (maf < _config.maf_min || maf > _config.maf_max) {
+            _snp_infos[i].af_masked = true;
+            ++n_masked;
+        }
+    }
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   " << (_snp_infos.size() - n_masked) << " SNPs passed MAF filter, "
+                  << n_masked << " masked\n";
+    }
+}
+
+void KinshipEstimator::_compute_af_from_bed() {
+    if (_config.verbose) std::cerr << "[fastlckin] Computing allele frequencies from .bed...\n";
+
+    std::string bed_path = _config.plink_prefix + ".bed";
+    std::string bim_path = _config.plink_prefix + ".bim";
+
+    int n_snps = static_cast<int>(_snp_infos.size());
+    std::vector<int> all_indices(n_snps);
+    for (int i = 0; i < n_snps; ++i) all_indices[i] = i;
+
+    auto freqs = compute_allele_frequencies(bed_path, bim_path, all_indices);
 
     // Apply MAF filter and assign frequencies
     int n_masked = 0;
@@ -176,6 +361,22 @@ void KinshipEstimator::_load_bed_genotypes() {
     }
 }
 
+void KinshipEstimator::_compute_expected_g() {
+    if (_config.verbose) std::cerr << "[fastlckin] Computing expected genotypes for LD pruning...\n";
+
+    std::vector<double> afs(_snp_infos.size());
+    for (size_t i = 0; i < _snp_infos.size(); ++i) {
+        afs[i] = _snp_infos[i].af;
+    }
+
+    _expected_genotypes = compute_expected_genotypes(_gl_matrix, afs);
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   " << _expected_genotypes.size() << " samples × "
+                  << (_expected_genotypes.empty() ? 0 : _expected_genotypes[0].size()) << " SNPs computed\n";
+    }
+}
+
 KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     KinshipResult result;
     result.ind1 = _sample_names[ind1];
@@ -191,8 +392,13 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
                   _gl_matrix[ind2][s].masked;
     }
 
-    // LD pruning
-    auto retained = ld_prune(_bed_genotypes, mask, _config.ld_config);
+    // LD pruning (mode-dependent)
+    std::vector<int> retained;
+    if (_config.input_mode == InputMode::VCF_ONLY) {
+        retained = ld_prune_from_gl(_expected_genotypes, mask, _config.ld_config);
+    } else {
+        retained = ld_prune(_bed_genotypes, mask, _config.ld_config);
+    }
     result.n_snps = static_cast<int>(retained.size());
 
     if (retained.empty()) {
@@ -317,17 +523,52 @@ std::string KinshipEstimator::classify_relationship(double k0, double k1, double
 std::vector<KinshipResult> KinshipEstimator::run() {
     auto t0 = std::chrono::steady_clock::now();
 
-    // Step 1: Load VCF
-    _load_vcf();
+    if (_config.verbose) {
+        std::cerr << "[fastlckin] Input mode: " << input_mode_name(_config.input_mode) << "\n";
+    }
 
-    // Step 2: Load/compute frequencies
-    _load_frequencies();
+    // Step 1: Load input (mode-dependent)
+    switch (_config.input_mode) {
+        case InputMode::VCF_ONLY:
+            _load_vcf_only();
+            break;
+        case InputMode::VCF_PLINK:
+            _load_vcf();
+            _load_bed_genotypes();
+            break;
+        case InputMode::PLINK_ONLY:
+            _load_plink_as_gl();
+            break;
+    }
 
-    // Step 3: Precompute IBS|IBD matrix
+    // Step 2: Load/compute frequencies (mode-dependent)
+    switch (_config.input_mode) {
+        case InputMode::VCF_ONLY:
+            _compute_af_from_gl();
+            break;
+        case InputMode::VCF_PLINK:
+            _load_frequencies();
+            break;
+        case InputMode::PLINK_ONLY:
+            _compute_af_from_bed();
+            break;
+    }
+
+    // Step 3: Precompute IBS|IBD matrix (all modes)
     _precompute_ibs_ibd();
 
-    // Step 4: Load .bed genotypes for LD pruning
-    _load_bed_genotypes();
+    // Step 4: Prepare LD pruning data (mode-dependent)
+    switch (_config.input_mode) {
+        case InputMode::VCF_ONLY:
+            _compute_expected_g();
+            break;
+        case InputMode::VCF_PLINK:
+            // _bed_genotypes already loaded in Step 1
+            break;
+        case InputMode::PLINK_ONLY:
+            // _bed_genotypes already loaded in _load_plink_as_gl()
+            break;
+    }
 
     // Step 5: Generate all pairs
     int n_samples = static_cast<int>(_sample_names.size());
@@ -386,6 +627,7 @@ std::vector<KinshipResult> KinshipEstimator::run() {
 
         // Header comments
         ofs << "# fastlckin relatedness v" << FASTLCKIN_VERSION << "\n";
+        ofs << "# Mode: " << input_mode_name(_config.input_mode) << "\n";
 
         // Get current time
         auto now = std::chrono::system_clock::now();
@@ -393,9 +635,10 @@ std::vector<KinshipResult> KinshipEstimator::run() {
         char time_buf[64];
         std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&t));
 
-        ofs << "# Command: fastlckin relatedness -v " << _config.vcf_path
-            << " -p " << _config.plink_prefix
-            << " -t " << _config.threads << "\n";
+        ofs << "# Command: fastlckin relatedness";
+        if (!_config.vcf_path.empty()) ofs << " -v " << _config.vcf_path;
+        if (!_config.plink_prefix.empty()) ofs << " -p " << _config.plink_prefix;
+        ofs << " -t " << _config.threads << "\n";
         ofs << "# Date: " << time_buf << "\n";
         ofs << "# FST: " << _config.fst
             << "  MAF_filter: [" << _config.maf_min << ", " << _config.maf_max << "]"

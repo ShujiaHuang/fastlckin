@@ -20,13 +20,13 @@ fastlckin is built on top of [htslib](https://github.com/samtools/htslib)
 internal thread pool.
 
 ```bash
-fastlckin v0.1.0
+fastlckin v0.2.0
   fastlckin: Fast Maximum Likelihood Kinship Estimation from Low-Coverage Sequencing Data
 
 Usage: fastlckin <command> [options]
 
 Commands:
-  relatedness   Estimate pairwise kinship (IBD coefficients) from VCF + PLINK
+  relatedness   Estimate pairwise kinship (IBD coefficients)
   freq          Compute allele frequencies from PLINK .bed/.bim files
 ```
 
@@ -35,7 +35,8 @@ Commands:
 | Feature | lcMLkin (Python) | fastlckin (C++) |
 | --- | --- | --- |
 | Language | Python 3 + scipy | C++17 |
-| LD pruning | External PLINK call per pair | Built-in C++ implementation |
+| Input modes | VCF + PLINK only | **VCF-only**, VCF + PLINK, **PLINK-only** |
+| LD pruning | External PLINK call per pair | Built-in C++ (hard or expected genotypes) |
 | VCF loading | `readlines()` loads all at once | Streaming via htslib (constant memory) |
 | Optimization | `scipy.optimize.fmin` | Native Nelder-Mead (no Python dependency) |
 | Parallelism | `multiprocessing` | Native `ThreadPool` |
@@ -166,7 +167,7 @@ cmake --build build-static --parallel
 Usage: fastlckin <command> [options]
 
 Commands:
-  relatedness   Estimate pairwise kinship (IBD coefficients) from VCF + PLINK
+  relatedness   Estimate pairwise kinship (IBD coefficients)
   freq          Compute allele frequencies from PLINK .bed/.bim files
 ```
 
@@ -174,22 +175,40 @@ Commands:
 
 ## `fastlckin relatedness` — Pairwise kinship estimation
 
-The main analysis command. It reads a multi-sample VCF (with PL or GL
-fields) together with PLINK binary files (`.bed/.bim/.fam`) and estimates
-IBD sharing coefficients (k0, k1, k2) for every pair of individuals using
-the GLkin maximum likelihood framework.
+The main analysis command. It estimates IBD sharing coefficients (k0, k1, k2)
+for every pair of individuals using the GLkin maximum likelihood framework.
+Three input modes are supported:
+
+### Input modes
+
+| Mode | Input | AF source | LD pruning | Best for |
+| --- | --- | --- | --- | --- |
+| **VCF-only** | `-v <VCF>` | EM from GL | Expected genotypes from GL | Low-coverage sequencing, no reference panel |
+| **VCF + PLINK** | `-v <VCF> -p <PREFIX>` | `.bed` hard genotypes | `.bed` hard genotypes | Low-coverage sequencing + reference panel |
+| **PLINK-only** | `-p <PREFIX>` | `.bed` hard genotypes | `.bed` hard genotypes | SNP array / high-coverage data |
+
+At least one of `-v` or `-p` must be provided. The mode is auto-detected
+from the combination of arguments.
+
+> **Mode selection guide:**
+> - Low-coverage sequencing data without a reference panel → **VCF-only**
+> - Low-coverage sequencing data with a reference panel → **VCF + PLINK**
+> - SNP array or high-coverage data → **PLINK-only**
+>
+> All three modes produce the same output format and use the same
+> relationship classification thresholds (see below).
 
 ### Full parameter reference of `relatedness`
 
 ```bash
-Usage: fastlckin relatedness -v <VCF> -p <PLINK_PREFIX> [options]
+Usage: fastlckin relatedness [-v <VCF>] [-p <PLINK_PREFIX>] [options]
 
-Required:
+At least one of -v or -p must be provided:
   -v, --vcf FILE          Input VCF/BCF file (.vcf, .vcf.gz, .bcf)
   -p, --plink PREFIX      PLINK binary file prefix (.bed/.bim/.fam)
 
 Optional:
-  -F, --freq FILE         Pre-computed .frq file (default: auto-compute from .bed)
+  -F, --freq FILE         Pre-computed .frq file (default: auto-compute)
   -f, --fst FLOAT         Prior FST value (default: 0.0)
   -t, --threads INT       Number of threads (default: 1)
   -o, --output FILE       Output TSV path (default: auto-generated)
@@ -197,7 +216,7 @@ Optional:
       --maf-max FLOAT     Max allele frequency filter (default: 0.95)
       --ld-window INT     LD pruning window size in SNPs (default: 50)
       --ld-step INT       LD pruning step size (default: 5)
-      --ld-r2 FLOAT       LD pruning r2 threshold (default: 0.8)
+      --ld-r2 FLOAT       LD pruning r2 threshold (default: 0.5)
       --gq-min INT        Min GQ quality threshold (default: 1)
       --n-restarts INT    Nelder-Mead restarts (default: 3)
       --xtol FLOAT        Optimizer parameter convergence (default: 0.01)
@@ -233,6 +252,12 @@ fastlckin classifies pairwise relationships using PI_HAT (π̂ = 0.5·k1 + k2)
 and IBD coefficients. The thresholds follow the log-scale midpoint scheme from
 KING (Manichaikul et al., 2010), but adapted to the PI_HAT convention
 (π̂ = 2φ, where φ is the kinship coefficient used by KING).
+
+> These thresholds are **identical across all three input modes** (VCF-only,
+> VCF+PLINK, PLINK-only) because PI_HAT is a property of the estimated IBD
+> coefficients, not the input data type. However, different modes may produce
+> slightly different PI_HAT estimates for the same pair due to differences
+> in frequency estimation and LD pruning.
 
 #### fastlckin classification rules
 
@@ -271,30 +296,51 @@ relationship categories.
 
 ### Usage examples
 
-**Basic kinship estimation:**
+> Input data should be biallelic SNPs and autosomes only.
 
-> Input data should be autosomes only.
+#### Mode 1 — VCF-only (no PLINK files needed)
 
 ```bash
 fastlckin relatedness \
     -v cohort_autosomes.vcf.gz \
-    -p /path/to/plink_prefix \
     -t 8 \
+    --classify \
     -o results.kinship.tsv
 ```
 
-**With relationship classification and verbose logging:**
+Allele frequencies are estimated from genotype likelihoods via the EM
+algorithm. LD pruning uses posterior expected genotypes.
+
+#### Mode 2 — VCF + PLINK (with reference panel)
 
 ```bash
 fastlckin relatedness \
-    -v cohort.vcf.gz \
+    -v cohort_autosomes.vcf.gz \
     -p /path/to/plink_prefix \
     -t 16 \
     --classify --verbose \
     -o results.kinship.tsv
 ```
 
-**Using a pre-computed frequency file and custom FST:**
+Frequencies are computed from the PLINK `.bed` file (or from a pre-computed
+`.frq` file via `-F`). LD pruning uses hard genotypes from `.bed`.
+
+#### Mode 3 — PLINK-only (hard genotype mode)
+
+```bash
+fastlckin relatedness \
+    -p /path/to/plink_prefix \
+    -t 8 \
+    --classify \
+    -o results.kinship.tsv
+```
+
+Hard genotypes are treated as delta-function likelihoods in the same MLE
+framework. Suitable for SNP array or high-coverage sequencing data.
+
+#### Additional examples
+
+**Using a pre-computed frequency file and custom FST (Mode 2):**
 
 ```bash
 fastlckin relatedness \
@@ -356,22 +402,30 @@ fastlckin implements the **GLkin** maximum likelihood framework:
 
 1. **Genotype Likelihood Extraction** — Reads PL (Phred-scaled) or GL
    (log10-scaled) fields from VCF, converting to linear-scale likelihoods.
-   PL is preferred when available.
+   PL is preferred when available. In PLINK-only mode, hard genotypes are
+   treated as delta-function likelihoods.
 
-2. **Anderson & Weir IBS|IBD Model** — For each SNP, computes the
+2. **Allele Frequency Estimation** — In VCF+PLINK and PLINK-only modes,
+   frequencies are computed by counting alleles from `.bed` hard genotypes.
+   In VCF-only mode, an **EM algorithm** estimates frequencies directly
+   from genotype likelihoods using a Hardy-Weinberg prior:
+   `P(G=0|p)=(1-p)²`, `P(G=1|p)=2p(1-p)`, `P(G=2|p)=p²`.
+
+3. **Anderson & Weir IBS|IBD Model** — For each SNP, computes the
    conditional probability P(genotype_combo | IBD_state) using the
    Anderson & Weir (2007) formula with FST correction via the Mij function:
    `M(p, FST, i) = (1 - FST)·p + i·FST`.
 
-3. **Built-in LD Pruning** — Sliding-window LD pruning (equivalent to
-   PLINK `--indep-pairwise`) is implemented natively, eliminating the
-   per-pair external tool calls and associated I/O overhead.
+4. **Built-in LD Pruning** — Sliding-window LD pruning (equivalent to
+   PLINK `--indep-pairwise`) is implemented natively. In VCF+PLINK and
+   PLINK-only modes, r² is computed from hard genotypes. In VCF-only mode,
+   r² is computed from **posterior expected genotypes** E[G|D,p].
 
-4. **Nelder-Mead Optimization** — Multi-restart Nelder-Mead simplex
+5. **Nelder-Mead Optimization** — Multi-restart Nelder-Mead simplex
    method finds the MLE of (k1, k2) under the IBD constraint space
    (k0 + k1 + k2 = 1, 4·k0·k2 ≤ k1²).
 
-5. **Multi-threaded Processing** — All sample pairs are processed in
+6. **Multi-threaded Processing** — All sample pairs are processed in
    parallel using a native thread pool.
 
 ---
@@ -381,9 +435,18 @@ fastlckin implements the **GLkin** maximum likelihood framework:
 - **PL over GL**: VCF files with PL fields are preferred — PL (Phred-scaled)
   is unambiguous and more commonly available. GL (log10-scaled) is used as
   fallback.
+- **Mode selection**: Use VCF-only mode when you only have a VCF. Use
+  VCF+PLINK when a reference panel is available (more accurate frequencies).
+  Use PLINK-only for SNP array data or high-coverage sequencing.
 - **LD pruning**: The default parameters (`--ld-window 50 --ld-step 5
-  --ld-r2 0.5`) are conservative. For dense SNP arrays, consider tightening
-  (`--ld-r2 0.2`).
+  --ld-r2 0.5`) are conservative. For dense SNP arrays or high-coverage
+  (~30x or >20x) WGS data, consider tightening (`--ld-r2 0.2`). For extremly
+  low-coverage (<1x) WGS data (like ancient DNA), consider using `--ld-r2 0.9`
+  or even larger.
+- **VCF-only LD note**: In VCF-only mode, expected-genotype r² is a
+  conservative (attenuated) estimator of true LD. Fewer SNPs are pruned
+  compared to hard-genotype LD pruning. For low-coverage data, consider
+  using a stricter `--ld-r2` threshold (e.g., 0.2–0.3).
 - **MAF filtering**: SNPs with very low or very high allele frequencies
   carry little information. The default `[0.05, 0.95]` range is suitable
   for most analyses.

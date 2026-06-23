@@ -19,6 +19,23 @@
 
 namespace fastlckin {
 
+/// Input mode for the kinship estimation pipeline
+enum class InputMode {
+    VCF_ONLY,     ///< Mode 1: VCF only (AF and LD from genotype likelihoods)
+    VCF_PLINK,    ///< Mode 2: VCF + PLINK (AF and LD from reference panel)
+    PLINK_ONLY    ///< Mode 3: PLINK only (hard genotype mode)
+};
+
+/// Return a human-readable name for the input mode
+inline const char* input_mode_name(InputMode m) {
+    switch (m) {
+        case InputMode::VCF_ONLY:   return "VCF-only";
+        case InputMode::VCF_PLINK:  return "VCF+PLINK";
+        case InputMode::PLINK_ONLY: return "PLINK-only";
+    }
+    return "Unknown";
+}
+
 /// Kinship estimation result for one pair
 struct KinshipResult {
     std::string ind1;
@@ -40,6 +57,9 @@ struct KinshipConfig {
     std::string plink_prefix;
     std::string freq_path;    ///< Optional pre-computed .frq
     std::string output_path;
+
+    // Input mode (auto-detected from provided files)
+    InputMode input_mode = InputMode::VCF_PLINK;
 
     // Algorithm parameters
     double fst = 0.0;
@@ -77,16 +97,24 @@ private:
     std::vector<SNPInfo> _snp_infos;          ///< VCF SNPs (filtered biallelic)
     GLMatrix _gl_matrix;                       ///< [sample][snp]
     IBS_IBD_Matrix _ibs_ibd;                   ///< [9][snp][3]
-    std::vector<std::vector<int8_t>> _bed_genotypes; ///< [sample][snp] for LD
+    std::vector<std::vector<int8_t>> _bed_genotypes; ///< [sample][snp] for LD (Mode 2/3)
+    std::vector<std::vector<double>> _expected_genotypes; ///< [sample][snp] for LD (Mode 1)
 
-    // Mapping: VCF SNP index → .bim SNP index
+    // Mapping: VCF SNP index → .bim SNP index (Mode 2 only)
     std::vector<int> _vcf_to_bim_index;
 
-    // Internal steps
-    void _load_vcf();
-    void _load_frequencies();
-    void _precompute_ibs_ibd();
-    void _load_bed_genotypes();
+    // Internal steps — Mode-dependent loading
+    void _load_vcf();           ///< Mode 2: VCF with .bim whitelist
+    void _load_vcf_only();      ///< Mode 1: VCF without .bim filter
+    void _load_plink_as_gl();   ///< Mode 3: .bed → delta-function GL
+
+    // Internal steps — common
+    void _load_frequencies();       ///< Mode 2: AF from .bed (or .frq)
+    void _compute_af_from_gl();     ///< Mode 1: AF via EM from GL
+    void _compute_af_from_bed();    ///< Mode 3: AF from .bed directly
+    void _precompute_ibs_ibd();     ///< All modes
+    void _load_bed_genotypes();     ///< Mode 2: .bed for LD pruning
+    void _compute_expected_g();     ///< Mode 1: posterior E[G] for LD pruning
 
     /// Estimate IBD coefficients for a single pair
     KinshipResult _estimate_pair(int ind1, int ind2);

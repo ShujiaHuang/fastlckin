@@ -24,7 +24,7 @@ static int usage() {
               << "Author: " << FASTLCKIN_AUTHOR << "\n\n"
               << "Usage: fastlckin <command> [options]\n\n"
               << "Commands:\n"
-              << "  relatedness   Estimate pairwise kinship (IBD coefficients) from VCF + PLINK\n"
+              << "  relatedness   Estimate pairwise kinship (IBD coefficients)\n"
               << "  freq          Compute allele frequencies from PLINK .bed/.bim files\n\n"
               << "Use 'fastlckin <command> -h' for command-specific help.\n";
     return 1;
@@ -35,10 +35,14 @@ static int usage() {
 // ────────────────────────────────────────────────────────────────────
 static int relatedness_usage(const fastlckin::KinshipConfig &config) {
     std::cerr << "\n"
-              << "Usage: fastlckin relatedness -v <VCF> -p <PLINK_PREFIX> [options]\n\n"
-              << "Required:\n"
+              << "Usage: fastlckin relatedness [-v <VCF>] [-p <PLINK_PREFIX>] [options]\n\n"
+              << "At least one of -v or -p must be provided:\n"
               << "  -v, --vcf FILE          Input VCF/BCF file (.vcf, .vcf.gz, .bcf)\n"
               << "  -p, --plink PREFIX      PLINK binary file prefix (.bed/.bim/.fam)\n\n"
+              << "Input modes:\n"
+              << "  -v only      VCF-only (AF and LD from genotype likelihoods)\n"
+              << "  -v + -p      VCF + PLINK (AF and LD from reference panel)\n"
+              << "  -p only      PLINK-only (hard genotype mode)\n\n"
               << "Optional:\n"
               << "  -F, --freq FILE         Pre-computed .frq file (default: auto-compute)\n"
               << "  -f, --fst FLOAT         Prior FST value (default: " << config.fst << ")\n"
@@ -110,9 +114,18 @@ static int run_relatedness(int argc, char* argv[]) {
         }
     }
 
-    if (config.vcf_path.empty() || config.plink_prefix.empty()) {
-        std::cerr << "Error: missing required arguments.\n";
+    if (config.vcf_path.empty() && config.plink_prefix.empty()) {
+        std::cerr << "Error: at least one of -v or -p must be provided.\n";
         return relatedness_usage(config);
+    }
+
+    // Auto-detect input mode
+    if (!config.vcf_path.empty() && config.plink_prefix.empty()) {
+        config.input_mode = fastlckin::InputMode::VCF_ONLY;
+    } else if (!config.vcf_path.empty() && !config.plink_prefix.empty()) {
+        config.input_mode = fastlckin::InputMode::VCF_PLINK;
+    } else {
+        config.input_mode = fastlckin::InputMode::PLINK_ONLY;
     }
 
     fastlckin::KinshipEstimator estimator(config);
