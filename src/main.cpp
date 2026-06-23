@@ -20,7 +20,7 @@
 static int usage() {
     std::cerr << FASTLCKIN_DESCRIPTION << "\n"
               << "Version: v" << FASTLCKIN_VERSION << "\n"
-              << "Author:   " << FASTLCKIN_AUTHOR  << "\n\n"
+              << "Author : "  << FASTLCKIN_AUTHOR  << "\n\n"
               << "Usage: fastlckin <command> [options]\n\n"
               << "Commands:\n"
               << "  relatedness   Estimate pairwise kinship (IBD coefficients)\n"
