@@ -51,7 +51,7 @@ jobs:
               -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      run: cmake --build ${{ github.workspace }}/build --config Release --parallel
+      run: cmake --build ${{ github.workspace }}/build --config Release --parallel 2
 
     - name: Generate test data
       run: ${{ github.workspace }}/build/tests/generate_test_data
@@ -132,7 +132,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
 
         echo "=== Building ==="
-        cmake --build build-static --config Release --parallel
+        cmake --build build-static --config Release --parallel 2
 
         echo "=== Verifying binary ==="
         file bin/fastlckin
@@ -157,7 +157,7 @@ jobs:
         cmake -B build-static \
           -DSTATIC_BUILD=ON \
           -DCMAKE_BUILD_TYPE=Release
-        cmake --build build-static --config Release --parallel
+        cmake --build build-static --config Release --parallel 2
 
     - name: Verify binary (macOS)
       if: runner.os == 'macOS'
