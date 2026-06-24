@@ -110,9 +110,9 @@ int main() {
 
                 uint8_t code;
                 switch (genotypes[j][s]) {
-                case 0: code = 0; break;   // hom first (A1A1)
-                case 1: code = 2; break;   // het
-                case 2: code = 3; break;   // hom second (A2A2)
+                case 0: code = 0; break;   // hom_ref → PLINK code 0
+                case 1: code = 2; break;   // het → PLINK code 2
+                case 2: code = 3; break;   // hom_alt → PLINK code 3
                 default: code = 1; break;  // missing
                 }
 

@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <array>
+#include <utility>
 
 #include "ibd_model.h"
 #include "genotype_likelihood.h"
@@ -50,6 +51,23 @@ struct KinshipResult {
     bool failed = false;      ///< Estimation failed flag
 };
 
+/// Configuration for relationship classification thresholds (v0.4.0)
+struct ClassificationConfig {
+    double duplicate_threshold     = 0.708;  ///< PI_HAT > this && k2 > dup_k2 → Duplicate/MZ
+    double first_degree_threshold  = 0.354;  ///< PI_HAT in [this, dup] → 1st degree
+    double second_degree_threshold = 0.177;  ///< PI_HAT in [this, 1st] → 2nd degree
+    double third_degree_threshold  = 0.0884; ///< PI_HAT in [this, 2nd] → 3rd degree
+    double duplicate_k2_threshold  = 0.8;    ///< k2 > this required for Duplicate/MZ
+    bool use_custom = false;                 ///< True if user set custom thresholds
+};
+
+/// Configuration for KING-robust pre-screening (v0.4.0)
+struct ScreeningConfig {
+    bool enable_screening = false;           ///< Enable fast KING-robust pre-filter
+    double pi_hat_threshold = 0.0442;        ///< PI_HAT threshold (~3rd degree)
+    bool verbose = false;                    ///< Verbose screening output
+};
+
 /// Configuration for the full kinship estimation pipeline
 struct KinshipConfig {
     // Input files
@@ -65,13 +83,13 @@ struct KinshipConfig {
     InputMode input_mode = InputMode::VCF_PLINK;
 
     // Algorithm parameters
-    double fst = 0.0;
+    double fst     = 0.0;
     double maf_min = 0.05;
     double maf_max = 0.95;
-    int gq_min = 1;
+    int gq_min     = 1;
     int n_restarts = 5;           ///< Increased from 3 in v0.3.0 for better global optimum search
-    bool classify = false;
-    bool verbose = false;
+    bool classify  = false;
+    bool verbose   = false;
 
     // LD pruning parameters
     LDPruneConfig ld_config;
@@ -82,6 +100,12 @@ struct KinshipConfig {
 
     // Parallelism
     int threads = 1;
+
+    // v0.4.0 new features
+    std::string pairs_path;       ///< Optional file listing specific pairs to estimate (TSV: ind1\tind2)
+    ClassificationConfig classify_config;  ///< Custom classification thresholds
+    std::string fst_path;         ///< Optional per-SNP FST file (TSV: CHR\tPOS\tFST)
+    ScreeningConfig screening_config;  ///< KING-robust pre-screening config
 };
 
 /// Main kinship estimator class
@@ -93,6 +117,15 @@ public:
     /// @return Results for all sample pairs
     std::vector<KinshipResult> run();
 
+    /// Classify relationship based on IBD coefficients (default thresholds)
+    static std::string classify_relationship(double k0, double k1, double k2, double pi_hat);
+
+    /// Classify with custom thresholds (v0.4.0)
+    static std::string classify_relationship(
+        double k0, double k1, double k2, double pi_hat,
+        const ClassificationConfig& config
+    );
+
 private:
     KinshipConfig _config;
 
@@ -100,10 +133,11 @@ private:
     std::vector<std::string> _sample_names;
     std::vector<SNPInfo> _snp_infos;          ///< VCF SNPs (filtered biallelic)
     LikelihoodMatrix _gl_matrix;                ///< [sample][snp] genotype likelihoods
-    IBS_IBD_Matrix _ibs_ibd;                   ///< [9][snp][3]
+    IBS_IBD_Matrix _ibs_ibd;                   ///< [9][snp][3] (Mij model)
     std::vector<std::vector<int8_t>> _bed_genotypes; ///< [sample][snp] for LD (Mode 2/3)
     std::vector<std::vector<double>> _expected_genotypes; ///< [sample][snp] for LD (Mode 1)
     std::vector<int> _global_ld_retained;      ///< Global LD-pruned SNP indices (v0.3.0)
+    std::vector<double> _fst_vector;            ///< Per-SNP FST values (v0.4.0)
 
     // Mapping: VCF SNP index → .bim SNP index (Mode 2 only)
     std::vector<int> _vcf_to_bim_index;
@@ -131,8 +165,20 @@ private:
         const std::vector<int>& snp_indices    ///< LD-pruned SNP indices
     );
 
-    /// Classify relationship based on IBD coefficients
-    static std::string classify_relationship(double k0, double k1, double k2, double pi_hat);
+    // v0.4.0 helper methods
+    /// Load specific sample pairs from a TSV file (ind1\tind2 per line)
+    std::vector<std::pair<int, int>> _load_pairs_file(const std::string& path);
+
+    /// Load per-SNP FST values from file (v0.4.0)
+    std::vector<double> _load_fst_file(const std::string& path);
+
+    /// KING-robust PI_HAT estimate for a pair (v0.4.0)
+    double _king_robust_pihat(int ind1, int ind2);
+
+    /// Screen pairs using KING-robust, return only those above threshold (v0.4.0)
+    std::vector<std::pair<int, int>> _screen_pairs(
+        const std::vector<std::pair<int, int>>& all_pairs
+    );
 };
 
 }  // namespace fastlckin

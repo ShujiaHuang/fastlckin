@@ -56,6 +56,15 @@ std::array<std::array<double, 3>, 9> compute_ibs_ibd_probs(double af, double fst
 /// @return IBS_IBD_Matrix [9][N][3]
 IBS_IBD_Matrix precompute_ibs_ibd_matrix(const std::vector<SNPInfo>& snp_infos, double fst);
 
+/// Batch pre-compute with per-SNP FST vector (v0.4.0)
+/// @param snp_infos  SNP metadata list (with AF)
+/// @param fst_vector  Per-SNP FST values (size must match snp_infos)
+/// @return IBS_IBD_Matrix [9][N][3]
+IBS_IBD_Matrix precompute_ibs_ibd_matrix_fst_vector(
+    const std::vector<SNPInfo>& snp_infos,
+    const std::vector<double>& fst_vector
+);
+
 }  // namespace fastlckin
 
 #endif

@@ -344,7 +344,23 @@ void KinshipEstimator::_compute_af_from_bed() {
 
 void KinshipEstimator::_precompute_ibs_ibd() {
     if (_config.verbose) std::cerr << "[fastlckin] Precomputing IBS|IBD probability matrix...\n";
-    _ibs_ibd = precompute_ibs_ibd_matrix(_snp_infos, _config.fst);
+    
+    if (!_config.fst_path.empty()) {
+        // v0.4.0: Load per-SNP FST from file
+        _fst_vector = _load_fst_file(_config.fst_path);
+        _ibs_ibd = precompute_ibs_ibd_matrix_fst_vector(_snp_infos, _fst_vector);
+        if (_config.verbose) {
+            std::cerr << "[fastlckin]   Using per-SNP FST values from " 
+                      << _config.fst_path << " (" << _fst_vector.size() << " SNPs)\n";
+        }
+    } else {
+        // Use global FST
+        _ibs_ibd = precompute_ibs_ibd_matrix(_snp_infos, _config.fst);
+        if (_config.verbose) {
+            std::cerr << "[fastlckin]   Using global FST = " << _config.fst << "\n";
+        }
+    }
+
 }
 
 void KinshipEstimator::_load_bed_genotypes() {
@@ -423,13 +439,8 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
         return result;
     }
 
-    // Compute PIBS for this pair: PIBS[9] averaged across retained SNPs
-    // Actually PIBS varies per SNP, so we need per-SNP PIBS
-    // The likelihood function uses _ibs_ibd per SNP and PIBS per SNP per combo
-    // We pass snp_indices to the likelihood function which computes per-SNP
-
-    // Precompute PIBS[combo][snp_idx_within_retained]
-    // For efficiency, we store PIBS as [9][n_retained]
+    // Compute PIBS for this pair: genotype likelihood products per IBS combo
+    // PIBS[c] = GL1[g1] * GL2[g2] for the genotype combo c = (g1, g2)
     std::vector<std::array<double, 9>> pibs_per_snp(retained.size());
     for (size_t ri = 0; ri < retained.size(); ++ri) {
         int s = retained[ri];
@@ -447,14 +458,21 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
         pibs_per_snp[ri][QQQQ] = gl1.gl[2] * gl2.gl[2];
     }
 
-    // Objective function wrapper
+    // Objective function using the Anderson-Weir Mij model
+    // Uses smooth quadratic penalty for the Franks constraint (4*k0*k2 <= k1*k1)
     auto objective = [&](const std::vector<double>& k) -> double {
         double k0 = 1.0 - k[0] - k[1];
         double k1 = k[0];
         double k2 = k[1];
 
         if (k0 < 0 || k0 > 1 || k1 < 0 || k1 > 1 || k2 < 0 || k2 > 1) return 1e10;
-        if (4.0 * k2 * k0 > k1 * k1 + 1e-10) return 1e10;
+
+        // Smooth Franks constraint penalty: 4*k0*k2 <= k1*k1
+        double franks_violation = 4.0 * k0 * k2 - k1 * k1;
+        double penalty = 0.0;
+        if (franks_violation > 0.0) {
+            penalty = 100.0 * franks_violation * franks_violation;
+        }
 
         double log_likelihood = 0.0;
         for (size_t ri = 0; ri < retained.size(); ++ri) {
@@ -470,25 +488,110 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
             log_likelihood += std::log(site_prob);
         }
         if (std::isinf(log_likelihood)) return 1e10;
-        return -log_likelihood;
+        return -log_likelihood + penalty;
     };
 
-    // Run Nelder-Mead with multiple restarts
+    // ── v0.5.0: Count IBS=0 sites for PO detection ───────────────
+    // Parent-offspring pairs can NEVER have opposite homozygotes (IBS=0).
+    int ibs0_count = 0;
+    for (size_t ri = 0; ri < retained.size(); ++ri) {
+        int s = retained[ri];
+        const auto& gl1 = _gl_matrix[ind1][s];
+        const auto& gl2 = _gl_matrix[ind2][s];
+        bool g1_hom_ref = (gl1.gl[0] > gl1.gl[1] && gl1.gl[0] > gl1.gl[2]);
+        bool g1_hom_alt = (gl1.gl[2] > gl1.gl[0] && gl1.gl[2] > gl1.gl[1]);
+        bool g2_hom_ref = (gl2.gl[0] > gl2.gl[1] && gl2.gl[0] > gl2.gl[2]);
+        bool g2_hom_alt = (gl2.gl[2] > gl2.gl[0] && gl2.gl[2] > gl2.gl[1]);
+        if ((g1_hom_ref && g2_hom_alt) || (g1_hom_alt && g2_hom_ref)) {
+            ++ibs0_count;
+        }
+    }
+
+
+    // ── v0.5.0: Strategic multi-start initialization ──────────────────
+    // Deterministic starting points cover all major relationship types,
+    // each slightly offset from boundaries so the Nelder-Mead simplex
+    // can explore in all directions.
+    static const std::vector<std::vector<double>> strategic_starts = {
+        {0.001, 0.001},  // Near-unrelated:   (k0=0.998, k1=0.001, k2=0.001)
+        {0.01, 0.01},    // Unrelated-like:   (k0=0.98, k1=0.01, k2=0.01)
+        {0.95, 0.01},    // PO-like:          (k0=0.04, k1=0.95, k2=0.01)
+        {0.50, 0.20},    // FS-like:          (k0=0.30, k1=0.50, k2=0.20)
+        {0.45, 0.05},    // HS/Avunc-like:    (k0=0.50, k1=0.45, k2=0.05)
+        {0.25, 0.25},    // Duplicate-like:   (k0=0.50, k1=0.25, k2=0.25)
+    };
+
     std::mt19937 rng(ind1 * 1000 + ind2);
     NelderMeadResult best;
     best.fval = 1e10;
 
-    for (int restart = 0; restart < _config.n_restarts; ++restart) {
-        std::vector<double> x0;
-        if (restart == 0) {
-            x0 = {0.0, 0.0};
-        } else {
-            x0 = random_ibd_start(rng);
+    // Phase 1: Strategic deterministic starts
+    int n_strategic = static_cast<int>(strategic_starts.size());
+    for (int restart = 0; restart < n_strategic; ++restart) {
+        auto nm_result = nelder_mead(objective, strategic_starts[restart], _config.nm_config);
+        if (nm_result.fval < best.fval) {
+            best = nm_result;
         }
+    }
 
+    // Phase 2: Random starts for remaining restart budget
+    for (int restart = n_strategic; restart < _config.n_restarts; ++restart) {
+        auto x0 = random_ibd_start(rng);
         auto nm_result = nelder_mead(objective, x0, _config.nm_config);
         if (nm_result.fval < best.fval) {
             best = nm_result;
+        }
+    }
+
+    // Phase 3: Boundary-near refinement (v0.5.0)
+    // Always search along the PO edge (k2=0) and the Duplicate edge (k0≈0)
+    // to guarantee these boundary solutions are explored.
+    {
+        // PO edge search: k2=0, vary k1 from 0.5 to 0.99
+        // Find the best starting point on this edge, then refine with NM.
+        // Also evaluate exact boundary points
+        {
+            std::vector<double> unrelated_pt = {0.0001, 0.0001};
+            double f_unrelated = objective(unrelated_pt);
+            if (f_unrelated < best.fval) {
+                best.fval = f_unrelated;
+                best.x = unrelated_pt;
+            }
+        }
+
+        // PO edge search: scan k2=0 boundary from k1=0 to k1=1
+        double best_edge_fval = 1e10;
+        std::vector<double> best_edge_x0 = {0.95, 0.0};
+        for (double k1 = 0.01; k1 <= 0.995; k1 += 0.05) {
+            std::vector<double> pt = {k1, 0.0};
+            double f = objective(pt);
+            if (f < best_edge_fval) {
+                best_edge_fval = f;
+                best_edge_x0 = pt;
+            }
+        }
+        // Refine from the best edge point
+        auto nm_edge = nelder_mead(objective, best_edge_x0, _config.nm_config);
+        if (nm_edge.fval < best.fval) {
+            best = nm_edge;
+        }
+
+        // Also try near the Duplicate vertex (k1≈0, k2≈1)
+        std::vector<double> dup_start = {0.001, 0.998};
+        auto nm_dup = nelder_mead(objective, dup_start, _config.nm_config);
+        if (nm_dup.fval < best.fval) {
+            best = nm_dup;
+        }
+
+        // Near-boundary refinement from current best
+        double k0_best = 1.0 - best.x[0] - best.x[1];
+        double k2_best = best.x[1];
+        if (k0_best < 0.15) {
+            std::vector<double> refine = {0.998, std::max(0.001, k2_best)};
+            auto nm_refine = nelder_mead(objective, refine, _config.nm_config);
+            if (nm_refine.fval < best.fval) {
+                best = nm_refine;
+            }
         }
     }
 
@@ -510,6 +613,20 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
         k2_opt /= sum;
     }
 
+    // ── v0.5.0: PO override based on IBS=0 count ──────────────────
+    // The Anderson-Weir Mij model computes population-averaged P(IBS|IBD)
+    // probabilities, which don't match the Mendelian-conditional genotype
+    // distribution for parent-offspring pairs. This can cause the MLE to
+    // converge to a spurious k0 > 0 minimum even when the true k0 = 0.
+    //
+    // Key insight: PO pairs can NEVER have opposite homozygotes (IBS=0).
+    // If ibs0_count = 0 and k2 ≈ 0, the pair is very likely PO.
+    if (k2_opt < 0.02 && ibs0_count == 0 && k0_opt > 0.01) {
+        k0_opt = 0.0;
+        k1_opt = 1.0;
+        k2_opt = 0.0;
+    }
+
     result.k0 = k0_opt;
     result.k1 = k1_opt;
     result.k2 = k2_opt;
@@ -518,20 +635,249 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     result.failed = false;
 
     if (_config.classify) {
-        result.relationship = classify_relationship(k0_opt, k1_opt, k2_opt, result.pi_hat);
+        if (_config.classify_config.use_custom) {
+            result.relationship = classify_relationship(
+                k0_opt, k1_opt, k2_opt, result.pi_hat, _config.classify_config
+            );
+        } else {
+            result.relationship = classify_relationship(k0_opt, k1_opt, k2_opt, result.pi_hat);
+        }
     }
 
     return result;
 }
 
 std::string KinshipEstimator::classify_relationship(double k0, double k1, double k2, double pi_hat) {
-    if (pi_hat > 0.708 && k2 > 0.8) return "Duplicate/MZ";
-    if (pi_hat >= 0.354 && pi_hat <= 0.708) {
+    ClassificationConfig defaults;
+    return classify_relationship(k0, k1, k2, pi_hat, defaults);
+}
+
+std::string KinshipEstimator::classify_relationship(
+    double k0, double k1, double k2, double pi_hat,
+    const ClassificationConfig& config
+) {
+    if (pi_hat > config.duplicate_threshold && k2 > config.duplicate_k2_threshold) 
+        return "Duplicate/MZ";
+    if (pi_hat >= config.first_degree_threshold && pi_hat <= config.duplicate_threshold) {
         return (k0 < 0.05) ? "Parent-Offspring" : "Full-Sibling";
     }
-    if (pi_hat >= 0.177 && pi_hat < 0.354) return "Second-degree";
-    if (pi_hat >= 0.0884 && pi_hat < 0.177) return "Third-degree";
+    if (pi_hat >= config.second_degree_threshold && pi_hat < config.first_degree_threshold) 
+        return "Second-degree";
+    if (pi_hat >= config.third_degree_threshold && pi_hat < config.second_degree_threshold) 
+        return "Third-degree";
     return "Unrelated";
+}
+
+std::vector<std::pair<int, int>> KinshipEstimator::_load_pairs_file(const std::string& path) {
+    std::ifstream ifs(path);
+    if (!ifs) throw std::runtime_error("Cannot open pairs file: " + path);
+
+    // Build sample name → index lookup
+    std::map<std::string, int> name_to_idx;
+    for (int i = 0; i < static_cast<int>(_sample_names.size()); ++i) {
+        name_to_idx[_sample_names[i]] = i;
+    }
+
+    std::vector<std::pair<int, int>> pairs;
+    std::string line;
+    int line_num = 0;
+    int n_skipped = 0;
+
+    while (std::getline(ifs, line)) {
+        ++line_num;
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream iss(line);
+        std::string name1, name2;
+        if (!(iss >> name1 >> name2)) {
+            if (_config.verbose) {
+                std::cerr << "[fastlckin] Warning: skipping malformed line " << line_num
+                          << " in pairs file\n";
+            }
+            ++n_skipped;
+            continue;
+        }
+
+        auto it1 = name_to_idx.find(name1);
+        auto it2 = name_to_idx.find(name2);
+
+        if (it1 == name_to_idx.end() || it2 == name_to_idx.end()) {
+            if (_config.verbose) {
+                std::cerr << "[fastlckin] Warning: unknown sample name on line " << line_num
+                          << " (" << name1 << ", " << name2 << "), skipping\n";
+            }
+            ++n_skipped;
+            continue;
+        }
+
+        int idx1 = it1->second;
+        int idx2 = it2->second;
+        // Ensure consistent ordering (smaller index first)
+        if (idx1 > idx2) std::swap(idx1, idx2);
+        if (idx1 != idx2) {
+            pairs.push_back({idx1, idx2});
+        }
+    }
+
+    if (_config.verbose && n_skipped > 0) {
+        std::cerr << "[fastlckin]   Skipped " << n_skipped << " invalid/unknown lines in pairs file\n";
+    }
+
+    return pairs;
+}
+
+std::vector<double> KinshipEstimator::_load_fst_file(const std::string& path) {
+    std::ifstream ifs(path);
+    if (!ifs) throw std::runtime_error("Cannot open FST file: " + path);
+
+    // Read FST file: CHR\tPOS\tFST (with optional header)
+    // Build lookup: "CHR_POS" → FST value
+    std::map<std::string, double> fst_lookup;
+    std::string line;
+    int n_lines = 0;
+
+    while (std::getline(ifs, line)) {
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream iss(line);
+        std::string chr, fst_str;
+        std::string pos_str;
+
+        if (!(iss >> chr >> pos_str >> fst_str)) continue;
+
+        // Skip header line
+        if (chr == "CHR" || chr == "chr") continue;
+
+        try {
+            double fst_val = std::stod(fst_str);
+            fst_lookup[chr + "_" + pos_str] = fst_val;
+            ++n_lines;
+        } catch (...) {
+            continue;
+        }
+    }
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   Loaded " << n_lines << " FST values from file\n";
+    }
+
+    // Map FST values to _snp_infos order
+    // SNPInfo stores pos as 0-based, FST file may use 1-based (PLINK .bim convention)
+    std::vector<double> fst_vector(_snp_infos.size(), _config.fst);  // default: global FST
+    int n_matched = 0;
+    int n_unmatched = 0;
+
+    for (size_t i = 0; i < _snp_infos.size(); ++i) {
+        const auto& snp = _snp_infos[i];
+        // Try both 0-based and 1-based positions
+        std::string key_0based = snp.chrom + "_" + std::to_string(snp.pos);
+        std::string key_1based = snp.chrom + "_" + std::to_string(snp.pos + 1);
+
+        auto it = fst_lookup.find(key_1based);
+        if (it == fst_lookup.end()) {
+            it = fst_lookup.find(key_0based);
+        }
+        if (it == fst_lookup.end()) {
+            // Try snp.id (which is CHR_POS format)
+            it = fst_lookup.find(snp.id);
+        }
+
+        if (it != fst_lookup.end()) {
+            fst_vector[i] = it->second;
+            ++n_matched;
+        } else {
+            ++n_unmatched;
+        }
+    }
+
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   FST matching: " << n_matched << " matched, "
+                  << n_unmatched << " using global FST default\n";
+    }
+
+    return fst_vector;
+}
+
+double KinshipEstimator::_king_robust_pihat(int ind1, int ind2) {
+    // KING-robust formula (Manichaikul et al. 2010):
+    // PI_HAT = sum_s [ (g1_s - 2*p_s) * (g2_s - 2*p_s) ] / sum_s [ 2 * p_s * (1 - p_s) ]
+    // where g1_s, g2_s are expected genotypes E[G] = P(G=1) + 2*P(G=2)
+    // and p_s is the allele frequency
+
+    int n_snps = static_cast<int>(_snp_infos.size());
+    double sum_num = 0.0;
+    double sum_den = 0.0;
+
+    for (int s = 0; s < n_snps; ++s) {
+        if (_snp_infos[s].af_masked) continue;
+        if (_gl_matrix[ind1][s].masked || _gl_matrix[ind2][s].masked) continue;
+
+        double p = _snp_infos[s].af;
+        if (p <= 0.0 || p >= 1.0) continue;
+
+        // Expected genotype E[G] = P(G=1) + 2*P(G=2)
+        double g1 = _gl_matrix[ind1][s].gl[1] + 2.0 * _gl_matrix[ind1][s].gl[2];
+        double g2 = _gl_matrix[ind2][s].gl[1] + 2.0 * _gl_matrix[ind2][s].gl[2];
+
+        // Normalize GL
+        double norm1 = _gl_matrix[ind1][s].gl[0] + _gl_matrix[ind1][s].gl[1] + _gl_matrix[ind1][s].gl[2];
+        double norm2 = _gl_matrix[ind2][s].gl[0] + _gl_matrix[ind2][s].gl[1] + _gl_matrix[ind2][s].gl[2];
+
+        if (norm1 > 0 && norm2 > 0) {
+            g1 /= norm1;
+            g2 /= norm2;
+        }
+
+        // KING-robust formula components
+        double numerator = (g1 - 2.0 * p) * (g2 - 2.0 * p);
+        double denominator = 2.0 * p * (1.0 - p);
+
+        sum_num += numerator;
+        sum_den += denominator;
+    }
+
+    return (sum_den > 1e-10) ? sum_num / sum_den : 0.0;
+}
+
+std::vector<std::pair<int, int>> KinshipEstimator::_screen_pairs(
+    const std::vector<std::pair<int, int>>& all_pairs
+) {
+    if (!_config.screening_config.enable_screening) {
+        return all_pairs;  // Screening not enabled
+    }
+
+    auto t0 = std::chrono::steady_clock::now();
+
+    std::vector<std::pair<int, int>> candidate_pairs;
+    int n_screened = 0;
+
+    for (const auto& pair : all_pairs) {
+        double pihat = _king_robust_pihat(pair.first, pair.second);
+
+        if (pihat >= _config.screening_config.pi_hat_threshold) {
+            candidate_pairs.push_back(pair);
+        }
+        n_screened++;
+
+        if (_config.screening_config.verbose && (n_screened % 10000 == 0)) {
+            std::cerr << "[fastlckin]   Screening: " << n_screened << "/" 
+                      << all_pairs.size() << " pairs, " 
+                      << candidate_pairs.size() << " candidates\n";
+        }
+    }
+
+    auto t1 = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+
+    if (_config.screening_config.verbose) {
+        std::cerr << "[fastlckin]   Screening completed: " << n_screened << " pairs in "
+                  << std::fixed << std::setprecision(1) << elapsed << "s\n";
+        std::cerr << "[fastlckin]   " << candidate_pairs.size() << "/" << n_screened 
+                  << " pairs passed threshold (" 
+                  << (100.0 * candidate_pairs.size() / std::max(1, n_screened)) << "%)\n";
+    }
+
+    return candidate_pairs;
 }
 
 std::vector<KinshipResult> KinshipEstimator::run() {
@@ -618,13 +964,29 @@ std::vector<KinshipResult> KinshipEstimator::run() {
         }
     }
 
-    // Step 5: Generate all pairs
+    // Step 5: Generate all pairs (or load from pairs file)
     int n_samples = static_cast<int>(_sample_names.size());
     std::vector<std::pair<int, int>> pairs;
-    for (int i = 0; i < n_samples; ++i) {
-        for (int j = i + 1; j < n_samples; ++j) {
-            pairs.push_back({i, j});
+    
+    if (!_config.pairs_path.empty()) {
+        // v0.4.0: Load specific pairs from file
+        pairs = _load_pairs_file(_config.pairs_path);
+        if (_config.verbose) {
+            std::cerr << "[fastlckin] Loaded " << pairs.size() 
+                      << " specific pairs from " << _config.pairs_path << "\n";
         }
+    } else {
+        // Generate all pairs
+        for (int i = 0; i < n_samples; ++i) {
+            for (int j = i + 1; j < n_samples; ++j) {
+                pairs.push_back({i, j});
+            }
+        }
+    }
+
+    // Step 5.5: Apply KING-robust screening (v0.4.0)
+    if (_config.screening_config.enable_screening) {
+        pairs = _screen_pairs(pairs);
     }
 
     int n_pairs = static_cast<int>(pairs.size());

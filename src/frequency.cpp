@@ -210,11 +210,9 @@ std::vector<double> compute_allele_frequencies(
         for (int i = 0; i < n_samples; ++i) {
             int8_t g = genotypes[i][s];
             if (g < 0) continue;
-            // In PLINK .bed: 0=A1A1, 1=A1A2, 2=A2A2
-            // We want alt(A1) frequency. A1 is .bim A1 column.
-            // genotype value 0 means hom_A1A1 → 2 A1 alleles
-            // genotype value 1 means het → 1 A1 allele
-            // genotype value 2 means hom_A2A2 → 0 A1 alleles
+            // In PLINK .bed: 0=hom_first, 1=missing, 2=het, 3=hom_second
+            // Internal g: 0=hom_first(A1A1), 1=het, 2=hom_second(A2A2)
+            // Sum of g counts A2 copies; (2-g) counts A1 copies
             allele_count += (2 - g);
             valid_count += 2;
         }

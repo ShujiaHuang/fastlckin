@@ -44,21 +44,29 @@ static int relatedness_usage(const fastlckin::KinshipConfig &config) {
               << "  -p only      PLINK-only (hard genotype mode)\n\n"
               << "Optional:\n"
               << "  -F, --freq FILE         Pre-computed .frq file (default: auto-compute)\n"
-              << "  -f, --fst FLOAT         Prior FST value (default: " << config.fst << ")\n"
-              << "  -t, --threads INT       Number of threads (default: " << config.threads << ")\n"
+              << "  -f, --fst FLOAT         Prior FST value (default: "               << config.fst                     << ")\n"
+              << "  -t, --threads INT       Number of threads (default: "             << config.threads                 << ")\n"
               << "  -o, --output FILE       Output TSV path (default: auto-generated)\n"
-              << "      --maf-min FLOAT     Min allele frequency filter (default: " << config.maf_min << ")\n"
-              << "      --maf-max FLOAT     Max allele frequency filter (default: " << config.maf_max << ")\n"
-              << "      --ld-window INT     LD pruning window size in SNPs (default: " << config.ld_config.window_size << ")\n"
-              << "      --ld-step INT       LD pruning step size (default: " << config.ld_config.step_size << ")\n"
-              << "      --ld-r2 FLOAT       LD pruning r2 threshold (default: " << config.ld_config.r2_threshold << ")\n"
+              << "      --maf-min FLOAT     Min allele frequency filter (default: "    << config.maf_min                << ")\n"
+              << "      --maf-max FLOAT     Max allele frequency filter (default: "    << config.maf_max                << ")\n"
+              << "      --ld-window INT     LD pruning window size in SNPs (default: " << config.ld_config.window_size  << ")\n"
+              << "      --ld-step INT       LD pruning step size (default: "           << config.ld_config.step_size    << ")\n"
+              << "      --ld-r2 FLOAT       LD pruning r2 threshold (default: "        << config.ld_config.r2_threshold << ")\n"
               << "      --no-ld-prune       Skip LD pruning entirely (use all unmasked SNPs)\n"
-              << "      --gq-min INT        Min GQ quality threshold (default: " << config.gq_min << ")\n"
+              << "      --gq-min INT        Min GQ quality threshold (default: "       << config.gq_min                 << ")\n"
               << "      --pl-field STR      VCF FORMAT field for Phred-scaled GL (default: PL)\n"
-              << "      --n-restarts INT    Nelder-Mead restarts (default: " << config.n_restarts << ")\n"
-              << "      --xtol FLOAT        Optimizer parameter convergence (default: " << config.nm_config.xtol << ")\n"
-              << "      --ftol FLOAT        Optimizer function convergence (default: " << config.nm_config.ftol << ")\n"
-              << "      --classify          Enable automatic relationship classification\n"
+              << "      --n-restarts INT    Nelder-Mead restarts (default: "            << config.n_restarts            << ")\n"
+              << "      --xtol FLOAT        Optimizer parameter convergence (default: " << config.nm_config.xtol        << ")\n"
+              << "      --ftol FLOAT        Optimizer function convergence (default: "  << config.nm_config.ftol        << ")\n"
+              << "      --pairs FILE        Estimate only specific pairs (TSV: ind1\\tind2)\n"
+              << "      --fst-file FILE     Per-SNP FST file (TSV: CHR\\tPOS\\tFST)\n"
+              << "      --screen            Enable KING-robust screening (fast pre-filter)\n"
+              << "      --screen-threshold FLOAT     PI_HAT threshold for screening (default: 0.0442)\n"
+              << "      --classify                   Enable automatic relationship classification\n\n"
+              << "      --classify-dup-threshold     FLOAT PI_HAT threshold for Duplicate/MZ (default: 0.708)\n"
+              << "      --classify-first-threshold   FLOAT PI_HAT threshold for 1st degree (default: 0.354)\n"
+              << "      --classify-second-threshold  FLOAT PI_HAT threshold for 2nd degree (default: 0.177)\n"
+              << "      --classify-third-threshold   FLOAT PI_HAT threshold for 3rd degree (default: 0.0884)\n\n"
               << "      --verbose           Verbose logging\n"
               << "  -h, --help              Show this help message\n";
     return 1;
@@ -68,27 +76,35 @@ static int run_relatedness(int argc, char* argv[]) {
     fastlckin::KinshipConfig config;
 
     static struct option long_options[] = {
-        {"vcf",        required_argument, nullptr, 'v'},
-        {"plink",      required_argument, nullptr, 'p'},
-        {"freq",       required_argument, nullptr, 'F'},
-        {"fst",        required_argument, nullptr, 'f'},
-        {"threads",    required_argument, nullptr, 't'},
-        {"output",     required_argument, nullptr, 'o'},
-        {"maf-min",    required_argument, nullptr, 1001},
-        {"maf-max",    required_argument, nullptr, 1002},
-        {"ld-window",  required_argument, nullptr, 1003},
-        {"ld-step",    required_argument, nullptr, 1004},
-        {"ld-r2",      required_argument, nullptr, 1005},
-        {"no-ld-prune", no_argument,      nullptr, 1013},
-        {"gq-min",     required_argument, nullptr, 1006},
-        {"pl-field",   required_argument, nullptr, 1012},
-        {"n-restarts", required_argument, nullptr, 1007},
-        {"xtol",       required_argument, nullptr, 1008},
-        {"ftol",       required_argument, nullptr, 1009},
-        {"classify",   no_argument,       nullptr, 1010},
-        {"verbose",    no_argument,       nullptr, 1011},
-        {"help",       no_argument,       nullptr, 'h'},
-        {nullptr,      0,                 nullptr,  0 }
+        {"vcf",                       required_argument, nullptr, 'v'},
+        {"plink",                     required_argument, nullptr, 'p'},
+        {"freq",                      required_argument, nullptr, 'F'},
+        {"fst",                       required_argument, nullptr, 'f'},
+        {"threads",                   required_argument, nullptr, 't'},
+        {"output",                    required_argument, nullptr, 'o'},
+        {"maf-min",                   required_argument, nullptr, 1001},
+        {"maf-max",                   required_argument, nullptr, 1002},
+        {"ld-window",                 required_argument, nullptr, 1003},
+        {"ld-step",                   required_argument, nullptr, 1004},
+        {"ld-r2",                     required_argument, nullptr, 1005},
+        {"pairs",                     required_argument, nullptr, 1014},
+        {"fst-file",                  required_argument, nullptr, 1015},
+        {"classify-dup-threshold",    required_argument, nullptr, 2001},
+        {"classify-first-threshold",  required_argument, nullptr, 2002},
+        {"classify-second-threshold", required_argument, nullptr, 2003},
+        {"classify-third-threshold",  required_argument, nullptr, 2004},
+        {"screen",                    no_argument,       nullptr, 3001},
+        {"screen-threshold",          required_argument, nullptr, 3002},
+        {"no-ld-prune",               no_argument,       nullptr, 1013},
+        {"gq-min",                    required_argument, nullptr, 1006},
+        {"pl-field",                  required_argument, nullptr, 1012},
+        {"n-restarts",                required_argument, nullptr, 1007},
+        {"xtol",                      required_argument, nullptr, 1008},
+        {"ftol",                      required_argument, nullptr, 1009},
+        {"classify",                  no_argument,       nullptr, 1010},
+        {"verbose",                   no_argument,       nullptr, 1011},
+        {"help",                      no_argument,       nullptr, 'h'},
+        {nullptr, 0, nullptr, 0}
     };
 
     int c;
@@ -106,6 +122,19 @@ static int run_relatedness(int argc, char* argv[]) {
             case 1003: config.ld_config.window_size = std::atoi(optarg); break;
             case 1004: config.ld_config.step_size = std::atoi(optarg); break;
             case 1005: config.ld_config.r2_threshold = std::atof(optarg); break;
+            case 1014: config.pairs_path = optarg; break;
+            case 1015: config.fst_path = optarg; break;
+            case 2001: config.classify_config.duplicate_threshold = std::atof(optarg);
+                       config.classify_config.use_custom = true; break;
+            case 2002: config.classify_config.first_degree_threshold = std::atof(optarg);
+                       config.classify_config.use_custom = true; break;
+            case 2003: config.classify_config.second_degree_threshold = std::atof(optarg);
+                       config.classify_config.use_custom = true; break;
+            case 2004: config.classify_config.third_degree_threshold = std::atof(optarg);
+                       config.classify_config.use_custom = true; break;
+            case 3001: config.screening_config.enable_screening = true; break;
+            case 3002: config.screening_config.pi_hat_threshold = std::atof(optarg);
+                       config.screening_config.enable_screening = true; break;
             case 1013: config.ld_config.skip = true; break;
             case 1006: config.gq_min = std::atoi(optarg); break;
             case 1012: config.pl_field = optarg; break;

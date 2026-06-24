@@ -19,16 +19,28 @@ constexpr double GAMMA   = 2.0;   // expansion
 constexpr double RHO     = 0.5;   // contraction
 constexpr double SIGMA   = 0.5;   // shrink
 
-/// Build initial simplex: n+1 vertices for n-dimensional problem
+/// Build initial simplex: n+1 vertices for n-dimensional problem.
+/// Boundary-aware: when x0 is near the upper bound of the IBD simplex
+/// (k0+k1+k2=1, i.e. x[0]+x[1] <= 1), steps are scaled to remain valid.
 std::vector<std::vector<double>> make_simplex(const std::vector<double>& x0) {
     int n = static_cast<int>(x0.size());
     std::vector<std::vector<double>> simplex(n + 1, x0);
 
+    // Sum of coordinates (for IBD: k1+k2; valid when <= 1)
+    double x_sum = 0.0;
+    for (int j = 0; j < n; ++j) x_sum += x0[j];
+
     for (int i = 0; i < n; ++i) {
         if (std::abs(x0[i]) > 1e-8) {
-            simplex[i + 1][i] += std::abs(x0[i]) * 0.5;
+            double step = std::abs(x0[i]) * 0.5;
+            // Don't step past the simplex boundary (sum <= 1)
+            double remaining = std::max(0.01, 1.0 - x_sum);
+            step = std::min(step, remaining);
+            simplex[i + 1][i] += step;
         } else {
-            simplex[i + 1][i] = 0.5;
+            double step = 0.5;
+            double remaining = std::max(0.01, 1.0 - x_sum);
+            simplex[i + 1][i] = std::min(step, remaining);
         }
     }
     return simplex;

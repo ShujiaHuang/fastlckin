@@ -21,6 +21,15 @@ add_test(NAME generate_test_data
          COMMAND ${CMAKE_BINARY_DIR}/tests/generate_test_data
          WORKING_DIRECTORY ${PROJECT_ROOT})
 
+# ── Known-relationship data generator (standalone, no htslib) ──────
+add_executable(generate_known_relationships
+    ${CMAKE_CURRENT_SOURCE_DIR}/generate_known_relationships.cpp)
+set_target_properties(generate_known_relationships PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
+add_test(NAME generate_known_relationships
+         COMMAND ${CMAKE_BINARY_DIR}/tests/generate_known_relationships
+         WORKING_DIRECTORY ${PROJECT_ROOT})
+
 # ── Unit test executables ───────────────────────────────────────────
 file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp")
 
