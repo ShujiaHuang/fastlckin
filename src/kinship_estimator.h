@@ -41,14 +41,29 @@ inline const char* input_mode_name(InputMode m) {
 struct KinshipResult {
     std::string ind1;
     std::string ind2;
-    double k0 = 0.0;          ///< IBD=0 probability
-    double k1 = 0.0;          ///< IBD=1 probability
-    double k2 = 0.0;          ///< IBD=2 probability
-    double pi_hat = 0.0;      ///< Kinship coefficient = 0.5*k1 + k2
-    int n_snps = 0;           ///< Number of SNPs used
+    double k0 = 0.0;             ///< IBD=0 probability
+    double k1 = 0.0;             ///< IBD=1 probability
+    double k2 = 0.0;             ///< IBD=2 probability
+    double pi_hat = 0.0;         ///< Kinship coefficient = 0.5*k1 + k2
+    int n_snps = 0;              ///< Number of SNPs used
     double log_likelihood = 0.0; ///< Best negative log-likelihood
-    std::string relationship; ///< Classification label
-    bool failed = false;      ///< Estimation failed flag
+    std::string relationship;    ///< Classification label
+    bool failed = false;         ///< Estimation failed flag
+
+    // Standard errors and 95% confidence intervals (v0.7.0)
+    // -1.0 indicates NA (boundary or non-positive-definite Hessian)
+    double se_k0 = -1.0;          ///< SE of k0
+    double se_k1 = -1.0;          ///< SE of k1
+    double se_k2 = -1.0;          ///< SE of k2
+    double se_pi_hat = -1.0;      ///< SE of PI_HAT (Delta method)
+    double ci_k0_lo = -1.0;       ///< 95% CI lower bound for k0
+    double ci_k0_hi = -1.0;       ///< 95% CI upper bound for k0
+    double ci_k1_lo = -1.0;       ///< 95% CI lower bound for k1
+    double ci_k1_hi = -1.0;       ///< 95% CI upper bound for k1
+    double ci_k2_lo = -1.0;       ///< 95% CI lower bound for k2
+    double ci_k2_hi = -1.0;       ///< 95% CI upper bound for k2
+    double ci_pi_hat_lo = -1.0;   ///< 95% CI lower bound for PI_HAT
+    double ci_pi_hat_hi = -1.0;   ///< 95% CI upper bound for PI_HAT
 };
 
 /// Configuration for relationship classification thresholds (v0.4.0)

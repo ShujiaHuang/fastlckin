@@ -600,7 +600,7 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     double k2_opt = best.x[1];
     double k0_opt = 1.0 - k1_opt - k2_opt;
 
-    // Clamp to valid range
+    // Clamp to valid range FIRST, so SE/CI is computed at a valid point
     k0_opt = std::max(0.0, std::min(1.0, k0_opt));
     k1_opt = std::max(0.0, std::min(1.0, k1_opt));
     k2_opt = std::max(0.0, std::min(1.0, k2_opt));
@@ -614,17 +614,105 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     }
 
     // ── v0.5.0: PO override based on IBS=0 count ──────────────────
-    // The Anderson-Weir Mij model computes population-averaged P(IBS|IBD)
-    // probabilities, which don't match the Mendelian-conditional genotype
-    // distribution for parent-offspring pairs. This can cause the MLE to
-    // converge to a spurious k0 > 0 minimum even when the true k0 = 0.
-    //
-    // Key insight: PO pairs can NEVER have opposite homozygotes (IBS=0).
-    // If ibs0_count = 0 and k2 ≈ 0, the pair is very likely PO.
+    bool po_override_applied = false;
     if (k2_opt < 0.02 && ibs0_count == 0 && k0_opt > 0.01) {
         k0_opt = 0.0;
         k1_opt = 1.0;
         k2_opt = 0.0;
+        po_override_applied = true;
+    }
+
+    // ── v0.7.0: Standard errors via observed Fisher Information ──────────
+    // Compute numerical Hessian at the CLAMPED/NORMALIZED MLE point.
+    // Uses adaptive step size to maintain precision across different SNP counts.
+    if (!po_override_applied) {
+        auto neg_log_lik_pure = [&](double k1v, double k2v) -> double {
+            double k0v = 1.0 - k1v - k2v;
+            double ll = 0.0;
+            for (size_t ri = 0; ri < retained.size(); ++ri) {
+                int s = retained[ri];
+                double site_prob = 0.0;
+                for (int c = 0; c < 9; ++c) {
+                    double ibd_sum = k0v * _ibs_ibd[c][s][0]
+                                   + k1v * _ibs_ibd[c][s][1]
+                                   + k2v * _ibs_ibd[c][s][2];
+                    site_prob += pibs_per_snp[ri][c] * ibd_sum;
+                }
+                if (site_prob <= 0.0 || std::isinf(site_prob)) return 1e10;
+                ll += std::log(site_prob);
+            }
+            if (std::isinf(ll)) return 1e10;
+            return -ll;
+        };
+
+        // Adaptive step size: h = max(1e-6, 1e-4 * sqrt(|f00|/n_snps))
+        // Balances truncation error (h⁴f''''/12) vs rounding error (ε·f/h²)
+        // For N SNPs: |f| ~ N·2.3, optimal h ~ N^(1/2) · 1e-5
+        double f00 = neg_log_lik_pure(k1_opt, k2_opt);
+        double n_snps_d = static_cast<double>(retained.size());
+        double h_eps = std::max(1e-6, 1e-4 * std::sqrt(std::abs(f00) / std::max(1.0, n_snps_d)));
+
+        double fp1 = neg_log_lik_pure(k1_opt + h_eps, k2_opt);
+        double fm1 = neg_log_lik_pure(k1_opt - h_eps, k2_opt);
+        double fp2 = neg_log_lik_pure(k1_opt, k2_opt + h_eps);
+        double fm2 = neg_log_lik_pure(k1_opt, k2_opt - h_eps);
+        double fpp = neg_log_lik_pure(k1_opt + h_eps, k2_opt + h_eps);
+        double fpm = neg_log_lik_pure(k1_opt + h_eps, k2_opt - h_eps);
+        double fmp = neg_log_lik_pure(k1_opt - h_eps, k2_opt + h_eps);
+        double fmm = neg_log_lik_pure(k1_opt - h_eps, k2_opt - h_eps);
+
+        double H00 = (fp1 - 2.0 * f00 + fm1) / (h_eps * h_eps);  // d²f/dk1²
+        double H11 = (fp2 - 2.0 * f00 + fm2) / (h_eps * h_eps);  // d²f/dk2²
+        double H01 = (fpp - fpm - fmp + fmm) / (4.0 * h_eps * h_eps);  // d²f/dk1dk2
+
+        double det = H00 * H11 - H01 * H01;
+        // Hessian must be positive definite: H00 > 0 and det > 0
+        // Also require det to be sufficiently large relative to Hessian elements
+        // to avoid ill-conditioned inversion (condition number check)
+        if (H00 > 0.0 && det > 0.0) {
+            double cond = (H00 + H11 + std::sqrt(H01 * H01)) / std::sqrt(det);
+            if (cond < 1e8) {  // Condition number threshold
+                double var_k1 = H11 / det;
+                double var_k2 = H00 / det;
+                double cov_k12 = -H01 / det;
+
+                // SE(k0): k0 = 1 - k1 - k2 => Var(k0) = Var(k1) + Var(k2) + 2*Cov(k1,k2)
+                double var_k0 = var_k1 + var_k2 + 2.0 * cov_k12;
+                double se_k0 = (var_k0 > 0.0) ? std::sqrt(var_k0) : -1.0;
+                double se_k1 = (var_k1 > 0.0) ? std::sqrt(var_k1) : -1.0;
+                double se_k2 = (var_k2 > 0.0) ? std::sqrt(var_k2) : -1.0;
+
+                // SE(PI_HAT): PI_HAT = 0.5*k1 + k2 (Delta method)
+                // Var(PI) = 0.25*Var(k1) + Var(k2) + 2*0.5*Cov(k1,k2)
+                double var_pi = 0.25 * var_k1 + var_k2 + cov_k12;
+                double se_pi = (var_pi > 0.0) ? std::sqrt(var_pi) : -1.0;
+
+                // Boundary check: SE unreliable when MLE is on parameter boundary
+                // Only check parameter bounds (k near 0), not the Cotterman constraint,
+                // because the penalty function may push the MLE slightly outside the
+                // feasible region.
+                bool on_boundary = (k0_opt < 0.01) || (k1_opt < 0.01) || (k2_opt < 0.01);
+
+                if (!on_boundary) {
+                    result.se_k0 = se_k0;
+                    result.se_k1 = se_k1;
+                    result.se_k2 = se_k2;
+                    result.se_pi_hat = se_pi;
+
+                    // 95% Wald confidence intervals: estimate +/- 1.96 * SE
+                    // Using the CLAMPED/NORMALIZED estimates as CI centers
+                    const double z = 1.96;
+                    result.ci_k0_lo = std::max(0.0, k0_opt - z * se_k0);
+                    result.ci_k0_hi = std::min(1.0, k0_opt + z * se_k0);
+                    result.ci_k1_lo = std::max(0.0, k1_opt - z * se_k1);
+                    result.ci_k1_hi = std::min(1.0, k1_opt + z * se_k1);
+                    result.ci_k2_lo = std::max(0.0, k2_opt - z * se_k2);
+                    result.ci_k2_hi = std::min(1.0, k2_opt + z * se_k2);
+                    result.ci_pi_hat_lo = std::max(0.0, 0.5 * k1_opt + k2_opt - z * se_pi);
+                    result.ci_pi_hat_hi = std::min(1.0, 0.5 * k1_opt + k2_opt + z * se_pi);
+                }
+            }
+        }
     }
 
     result.k0 = k0_opt;
@@ -1062,7 +1150,15 @@ std::vector<KinshipResult> KinshipEstimator::run() {
         // Column header
         ofs << "Ind1\tInd2\tk0\tk1\tk2\tPI_HAT\tN_SNPs";
         if (_config.classify) ofs << "\tRelationship";
-        ofs << "\n";
+        ofs << "\tSE_k0\tSE_k1\tSE_k2\tSE_PI_HAT"
+            << "\tCI_k0_lo\tCI_k0_hi\tCI_k1_lo\tCI_k1_hi"
+            << "\tCI_k2_lo\tCI_k2_hi\tCI_PI_lo\tCI_PI_hi\n";
+
+        // Helper: format double or "NA" for -1 sentinel
+        auto fmt_val = [](std::ostream& os, double v) {
+            if (v < -0.5) os << "NA";
+            else os << std::fixed << std::setprecision(6) << v;
+        };
 
         // Data rows
         ofs << std::fixed << std::setprecision(6);
@@ -1071,6 +1167,18 @@ std::vector<KinshipResult> KinshipEstimator::run() {
                 << r.k0 << "\t" << r.k1 << "\t" << r.k2 << "\t"
                 << r.pi_hat << "\t" << r.n_snps;
             if (_config.classify) ofs << "\t" << r.relationship;
+            ofs << "\t"; fmt_val(ofs, r.se_k0); ofs << "\t";
+            fmt_val(ofs, r.se_k1); ofs << "\t";
+            fmt_val(ofs, r.se_k2); ofs << "\t";
+            fmt_val(ofs, r.se_pi_hat);
+            ofs << "\t"; fmt_val(ofs, r.ci_k0_lo); ofs << "\t";
+            fmt_val(ofs, r.ci_k0_hi); ofs << "\t";
+            fmt_val(ofs, r.ci_k1_lo); ofs << "\t";
+            fmt_val(ofs, r.ci_k1_hi); ofs << "\t";
+            fmt_val(ofs, r.ci_k2_lo); ofs << "\t";
+            fmt_val(ofs, r.ci_k2_hi); ofs << "\t";
+            fmt_val(ofs, r.ci_pi_hat_lo); ofs << "\t";
+            fmt_val(ofs, r.ci_pi_hat_hi);
             ofs << "\n";
         }
     }
