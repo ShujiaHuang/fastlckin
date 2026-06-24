@@ -5,7 +5,7 @@
  * @file algorithm.h
  * @brief Mathematical utility functions for kinship estimation
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <cmath>

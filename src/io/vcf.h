@@ -1,6 +1,6 @@
 // The C++ codes for VCF/BCF file reading
 // Author: Shujia Huang
-// Date: 2025-04-18 (Resumed 2025-04-27)
+// Date: 2026-04-18 (Resumed 2026-04-27)
 
 #ifndef __INCLUDE_NGSLIB_VCF_H__
 #define __INCLUDE_NGSLIB_VCF_H__

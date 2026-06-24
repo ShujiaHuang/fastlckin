@@ -2,7 +2,7 @@
  * @file main.cpp
  * @brief fastlckin entry point: sub-command dispatcher
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <iostream>
@@ -61,12 +61,16 @@ static int relatedness_usage(const fastlckin::KinshipConfig &config) {
               << "      --pairs FILE        Estimate only specific pairs (TSV: ind1\\tind2)\n"
               << "      --fst-file FILE     Per-SNP FST file (TSV: CHR\\tPOS\\tFST)\n"
               << "      --screen            Enable KING-robust screening (fast pre-filter)\n"
-              << "      --screen-threshold FLOAT     PI_HAT threshold for screening (default: 0.0442)\n"
-              << "      --classify                   Enable automatic relationship classification\n\n"
+              << "      --screen-threshold FLOAT     PI_HAT threshold for screening (default: 0.0442)\n\n"
+              << "Relationship classification:\n"
+              << "      --classify[=METHOD]  Classify relationship type (default method: threshold)\n"
+              << "                           threshold: PI_HAT cutoffs (UN/DUP/PO/2nd/3rd)\n"
+              << "                           likelihood: per-SNP exact genotype likelihood ratio\n"
               << "      --classify-dup-threshold     FLOAT PI_HAT threshold for Duplicate/MZ (default: 0.708)\n"
               << "      --classify-first-threshold   FLOAT PI_HAT threshold for 1st degree (default: 0.354)\n"
               << "      --classify-second-threshold  FLOAT PI_HAT threshold for 2nd degree (default: 0.177)\n"
-              << "      --classify-third-threshold   FLOAT PI_HAT threshold for 3rd degree (default: 0.0884)\n\n"
+              << "      --classify-third-threshold   FLOAT PI_HAT threshold for 3rd degree (default: 0.0884)\n"
+              << "      --output-likelihoods         Output per-relationship log-likelihood columns\n\n"
               << "      --verbose           Verbose logging\n"
               << "  -h, --help              Show this help message\n";
     return 1;
@@ -101,7 +105,8 @@ static int run_relatedness(int argc, char* argv[]) {
         {"n-restarts",                required_argument, nullptr, 1007},
         {"xtol",                      required_argument, nullptr, 1008},
         {"ftol",                      required_argument, nullptr, 1009},
-        {"classify",                  no_argument,       nullptr, 1010},
+        {"classify",                  optional_argument, nullptr, 1010},
+        {"output-likelihoods",        no_argument,       nullptr, 1017},
         {"verbose",                   no_argument,       nullptr, 1011},
         {"help",                      no_argument,       nullptr, 'h'},
         {nullptr, 0, nullptr, 0}
@@ -141,7 +146,14 @@ static int run_relatedness(int argc, char* argv[]) {
             case 1007: config.n_restarts = std::atoi(optarg); break;
             case 1008: config.nm_config.xtol = std::atof(optarg); break;
             case 1009: config.nm_config.ftol = std::atof(optarg); break;
-            case 1010: config.classify = true; break;
+            case 1010: {
+                config.classify = true;
+                if (optarg && std::string(optarg) == "likelihood") {
+                    config.model_selection = true;
+                }
+                break;
+            }
+            case 1017: config.output_likelihoods = true; break;
             case 1011: config.verbose = true; break;
             case 'h': return relatedness_usage(config);
             default:  return relatedness_usage(config);
@@ -226,13 +238,15 @@ static int run_freq(int argc, char* argv[]) {
 
     auto freqs = fastlckin::compute_allele_frequencies(bed_path, bim_path, all_indices);
 
-    // Write .frq file
+    // freqs[i] = ALT (A1) allele frequency
+    // Write .frq file in PLINK format: A1 = minor allele, MAF = freq(A1)
     std::ofstream ofs(output_path);
     if (!ofs) throw std::runtime_error("Cannot open output: " + output_path);
     ofs << "CHR\tSNP\tA1\tA2\tMAF\tNCHROBS\n";
     for (size_t i = 0; i < snp_infos.size(); ++i) {
-        double af = freqs[i];
+        double af = freqs[i];  // ALT frequency
         double maf = (af > 0.5) ? (1.0 - af) : af;
+        // A1 should be the minor allele
         std::string a1 = (af > 0.5) ? snp_infos[i].ref : snp_infos[i].alt;
         std::string a2 = (af > 0.5) ? snp_infos[i].alt : snp_infos[i].ref;
         ofs << snp_infos[i].chrom << "\t" << snp_infos[i].id << "\t"

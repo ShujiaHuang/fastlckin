@@ -1,6 +1,6 @@
 // The C++ codes for VCF/BCF Record
 // Author: Shujia Huang
-// Date: 2025-04-17
+// Date: 2026-04-17
 #ifndef __INCLUDE_NGSLIB_VCF_RECORD_H__
 #define __INCLUDE_NGSLIB_VCF_RECORD_H__
 

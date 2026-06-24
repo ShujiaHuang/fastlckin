@@ -2,7 +2,7 @@
  * @file ld_prune.cpp
  * @brief C++ built-in LD pruning implementation
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include "ld_prune.h"

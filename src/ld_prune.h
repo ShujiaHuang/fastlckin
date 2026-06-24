@@ -5,7 +5,7 @@
  * @file ld_prune.h
  * @brief C++ built-in LD pruning (replaces external PLINK calls)
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <vector>

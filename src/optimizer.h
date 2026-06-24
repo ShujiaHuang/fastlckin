@@ -5,7 +5,7 @@
  * @file optimizer.h
  * @brief Nelder-Mead simplex optimizer
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <vector>

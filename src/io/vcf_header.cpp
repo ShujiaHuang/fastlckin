@@ -1,6 +1,6 @@
 // The C++ codes for VCF/BCF Header
 // Author: Shujia Huang
-// Date: 2025-04-17
+// Date: 2026-04-17
 #include "vcf_header.h"
 
 namespace ngslib {

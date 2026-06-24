@@ -2,7 +2,7 @@
  * @file optimizer.cpp
  * @brief Nelder-Mead simplex optimizer implementation
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include "optimizer.h"

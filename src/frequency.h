@@ -5,7 +5,7 @@
  * @file frequency.h
  * @brief Allele frequency computation and file I/O
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <vector>

@@ -2,7 +2,7 @@
  * @file algorithm.cpp
  * @brief Mathematical utility functions implementation
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include "algorithm.h"

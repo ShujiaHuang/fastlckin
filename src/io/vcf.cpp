@@ -1,6 +1,6 @@
 // The C++ codes for VCF/BCF file reading
 // Author: Shujia Huang
-// Date: 2025-04-18
+// Date: 2026-04-18
 #include "vcf.h"
 
 namespace ngslib {

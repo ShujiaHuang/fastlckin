@@ -16,7 +16,7 @@
  * IBD=2: Both alleles shared (genotypes must match; two sequential draws)
  *
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include "ibd_model.h"
@@ -26,8 +26,8 @@ namespace fastlckin {
 std::array<std::array<double, 3>, 9> compute_ibs_ibd_probs(double af, double fst) {
     std::array<std::array<double, 3>, 9> B{};
 
-    double p = af;         // alt allele frequency
-    double q = 1.0 - p;    // ref allele frequency
+    double p = af;         // ALT allele frequency (P = gl[2])
+    double q = 1.0 - p;    // REF allele frequency (Q = gl[0])
     double F = fst;
 
     // Mij shorthand: M(freq, FST, i) = (1-FST)*freq + i*FST

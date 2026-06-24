@@ -5,7 +5,7 @@
  * @file test_harness.h
  * @brief Minimal unit-test framework (no external dependencies)
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <iostream>

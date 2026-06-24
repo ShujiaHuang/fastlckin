@@ -5,7 +5,7 @@
  * @file ibd_model.h
  * @brief Anderson & Weir (2007) IBS|IBD conditional probability model
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <vector>
@@ -23,7 +23,7 @@ struct SNPInfo {
     std::string id;         ///< CHR_POS format ID
     std::string ref;        ///< Reference allele
     std::string alt;        ///< Alternate allele (biallelic only)
-    double af = 0.0;        ///< Alternate allele frequency
+    double af = 0.0;        ///< ALT allele frequency (freq of gl[2] allele)
     bool af_masked = false; ///< AF filter flag
 };
 
@@ -45,7 +45,7 @@ inline double Mij(double p, double fst, int i) {
 }
 
 /// Compute 9 genotype combos × 3 IBD states for a single SNP
-/// @param af  Alternate allele frequency
+/// @param af  ALT allele frequency (P = gl[2] allele)
 /// @param fst FST value
 /// @return array[combo][ibd_state]
 std::array<std::array<double, 3>, 9> compute_ibs_ibd_probs(double af, double fst);

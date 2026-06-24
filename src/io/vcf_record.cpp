@@ -1,6 +1,6 @@
 // The C++ codes for VCF/BCF Record
 // Author: Roo (Inspired by Shujia Huang's BAM wrappers)
-// Date: 2025-04-17
+// Date: 2026-04-17
 
 #include "vcf_record.h"
 #include <htslib/vcf.h>

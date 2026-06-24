@@ -2,7 +2,7 @@
  * @file kinship_estimator.cpp
  * @brief Main kinship estimation pipeline implementation
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include "kinship_estimator.h"
@@ -211,7 +211,7 @@ void KinshipEstimator::_load_plink_as_gl() {
     _bed_genotypes = read_bed_genotypes(bed_path, bim_path, all_indices);
 
     // Convert hard genotypes to delta-function GL
-    const double EPS = 1e-10;
+    const double EPS = 1e-20;
     _gl_matrix.assign(n_samples, std::vector<GenotypeLikelihood>(n_snps));
 
     for (int i = 0; i < n_samples; ++i) {
@@ -282,6 +282,15 @@ void KinshipEstimator::_compute_af_from_likelihoods() {
 
     auto freqs = compute_af_from_likelihoods(_gl_matrix, 100, 1e-6, _config.verbose);
 
+    // The EM algorithm converges to the frequency of the allele at genotype
+    // index 2 (gl[2]).  In VCF convention, gl[0]=REF/REF and gl[2]=ALT/ALT,
+    // so EM gives the ALT allele frequency.
+    //
+    // Our convention: snp_infos[i].af stores the ALT allele frequency,
+    // consistent with the IBD model where P = gl[2] = ALT allele.
+    // All three AF paths (EM, compute_allele_frequencies, read_plink_freq)
+    // return ALT allele frequency for consistency.
+    //
     // Apply MAF filter and assign frequencies
     int n_masked = 0;
     for (size_t i = 0; i < _snp_infos.size(); ++i) {
@@ -361,6 +370,56 @@ void KinshipEstimator::_precompute_ibs_ibd() {
         }
     }
 
+}
+
+void KinshipEstimator::_precompute_relationship_likelihoods() {
+    if (_config.verbose) std::cerr << "[fastlckin] Precomputing exact relationship likelihoods...\n";
+    _rel_likelihoods = precompute_relationship_likelihoods(_snp_infos, _config.fst);
+    if (_config.verbose) {
+        std::cerr << "[fastlckin]   Computed likelihoods for " << NUM_RELATIONSHIP_TYPES
+                  << " relationship types x " << _snp_infos.size() << " SNPs\n";
+    }
+}
+
+int KinshipEstimator::_model_selection_pair(
+    const std::vector<std::array<double, 9>>& pibs_per_snp,
+    const std::vector<int>& retained,
+    KinshipResult& result
+) {
+    // Step 1: Compute log-likelihood for each of the 9 relationship types
+    for (int r = 0; r < NUM_RELATIONSHIP_TYPES; ++r) {
+        result.rel_log_likelihoods[r] = compute_relationship_log_likelihood(
+            _rel_likelihoods, pibs_per_snp, retained, static_cast<RelationshipType>(r)
+        );
+    }
+
+    // Step 2: Group by IBD equivalence class and find best class
+    // Due to the "random spouse" assumption, relationships with the same IBD
+    // coefficients produce identical likelihoods. We select by equivalence class.
+    double class_best_ll[NUM_IBD_CLASSES];
+    for (int c = 0; c < NUM_IBD_CLASSES; ++c) {
+        class_best_ll[c] = -1e18;
+    }
+
+    for (int r = 0; r < NUM_RELATIONSHIP_TYPES; ++r) {
+        int c = static_cast<int>(relationship_to_ibd_class(static_cast<RelationshipType>(r)));
+        if (result.rel_log_likelihoods[r] > class_best_ll[c]) {
+            class_best_ll[c] = result.rel_log_likelihoods[r];
+        }
+    }
+
+    // Step 3: Select the IBD class with highest log-likelihood
+    int best_class = 0;
+    double best_ll = class_best_ll[0];
+    for (int c = 1; c < NUM_IBD_CLASSES; ++c) {
+        if (class_best_ll[c] > best_ll) {
+            best_ll = class_best_ll[c];
+            best_class = c;
+        }
+    }
+
+    result.ms_relationship = ibd_class_name(static_cast<IBDEquivalenceClass>(best_class));
+    return best_class;
 }
 
 void KinshipEstimator::_load_bed_genotypes() {
@@ -447,15 +506,18 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
         const auto& gl1 = _gl_matrix[ind1][s];
         const auto& gl2 = _gl_matrix[ind2][s];
 
-        pibs_per_snp[ri][PPQQ] = gl1.gl[0] * gl2.gl[2];
-        pibs_per_snp[ri][QQPP] = gl1.gl[2] * gl2.gl[0];
-        pibs_per_snp[ri][PPPQ] = gl1.gl[0] * gl2.gl[1];
-        pibs_per_snp[ri][PQPP] = gl1.gl[1] * gl2.gl[0];
-        pibs_per_snp[ri][PQQQ] = gl1.gl[1] * gl2.gl[2];
-        pibs_per_snp[ri][QQPQ] = gl1.gl[2] * gl2.gl[1];
-        pibs_per_snp[ri][PPPP] = gl1.gl[0] * gl2.gl[0];
+        // P = gl[2] = ALT/ALT, Q = gl[0] = REF/REF
+        // This follows the standard VCF convention where gl[2] corresponds
+        // to the ALT allele, so the IBD model's af parameter = ALT frequency.
+        pibs_per_snp[ri][PPQQ] = gl1.gl[2] * gl2.gl[0];
+        pibs_per_snp[ri][QQPP] = gl1.gl[0] * gl2.gl[2];
+        pibs_per_snp[ri][PPPQ] = gl1.gl[2] * gl2.gl[1];
+        pibs_per_snp[ri][PQPP] = gl1.gl[1] * gl2.gl[2];
+        pibs_per_snp[ri][PQQQ] = gl1.gl[1] * gl2.gl[0];
+        pibs_per_snp[ri][QQPQ] = gl1.gl[0] * gl2.gl[1];
+        pibs_per_snp[ri][PPPP] = gl1.gl[2] * gl2.gl[2];
         pibs_per_snp[ri][PQPQ] = gl1.gl[1] * gl2.gl[1];
-        pibs_per_snp[ri][QQQQ] = gl1.gl[2] * gl2.gl[2];
+        pibs_per_snp[ri][QQQQ] = gl1.gl[0] * gl2.gl[0];
     }
 
     // Objective function using the Anderson-Weir Mij model
@@ -722,7 +784,16 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     result.log_likelihood = best.fval;
     result.failed = false;
 
-    if (_config.classify) {
+    // ── v0.7.0: Model selection ──────────────────────────────────
+    if (_config.model_selection || _config.output_likelihoods) {
+        int best_r = _model_selection_pair(pibs_per_snp, retained, result);
+        if (_config.model_selection) {
+            // Use model selection result as the primary classification
+            result.relationship = result.ms_relationship;
+        }
+    }
+
+    if (_config.classify && !_config.model_selection) {
         if (_config.classify_config.use_custom) {
             result.relationship = classify_relationship(
                 k0_opt, k1_opt, k2_opt, result.pi_hat, _config.classify_config
@@ -1007,6 +1078,11 @@ std::vector<KinshipResult> KinshipEstimator::run() {
     // Step 3: Precompute IBS|IBD matrix (all modes)
     _precompute_ibs_ibd();
 
+    // Step 3.5: Precompute exact relationship likelihoods (v0.7.0)
+    if (_config.model_selection || _config.output_likelihoods) {
+        _precompute_relationship_likelihoods();
+    }
+
     // Step 4: Prepare LD pruning data (mode-dependent; skipped if --no-ld-prune)
     if (!_config.ld_config.skip) {
         switch (_config.input_mode) {
@@ -1149,7 +1225,11 @@ std::vector<KinshipResult> KinshipEstimator::run() {
 
         // Column header
         ofs << "Ind1\tInd2\tk0\tk1\tk2\tPI_HAT\tN_SNPs";
-        if (_config.classify) ofs << "\tRelationship";
+        if (_config.classify || _config.model_selection) ofs << "\tRelationship";
+        if (_config.model_selection) ofs << "\tMS_Relationship";
+        if (_config.output_likelihoods) {
+            ofs << "\tLL_UN\tLL_DUP\tLL_PO\tLL_FS\tLL_HS\tLL_AV\tLL_GP\tLL_FC\tLL_GGP";
+        }
         ofs << "\tSE_k0\tSE_k1\tSE_k2\tSE_PI_HAT"
             << "\tCI_k0_lo\tCI_k0_hi\tCI_k1_lo\tCI_k1_hi"
             << "\tCI_k2_lo\tCI_k2_hi\tCI_PI_lo\tCI_PI_hi\n";
@@ -1166,7 +1246,13 @@ std::vector<KinshipResult> KinshipEstimator::run() {
             ofs << r.ind1 << "\t" << r.ind2 << "\t"
                 << r.k0 << "\t" << r.k1 << "\t" << r.k2 << "\t"
                 << r.pi_hat << "\t" << r.n_snps;
-            if (_config.classify) ofs << "\t" << r.relationship;
+            if (_config.classify || _config.model_selection) ofs << "\t" << r.relationship;
+            if (_config.model_selection) ofs << "\t" << r.ms_relationship;
+            if (_config.output_likelihoods) {
+                for (int ri = 0; ri < NUM_RELATIONSHIP_TYPES; ++ri) {
+                    ofs << "\t" << std::fixed << std::setprecision(4) << r.rel_log_likelihoods[ri];
+                }
+            }
             ofs << "\t"; fmt_val(ofs, r.se_k0); ofs << "\t";
             fmt_val(ofs, r.se_k1); ofs << "\t";
             fmt_val(ofs, r.se_k2); ofs << "\t";

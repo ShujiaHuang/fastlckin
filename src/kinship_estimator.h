@@ -5,7 +5,7 @@
  * @file kinship_estimator.h
  * @brief Main kinship estimation pipeline coordinator
  * @author Shujia Huang
- * @date 2025-06-23
+ * @date 2026-06-23
  */
 
 #include <vector>
@@ -17,6 +17,7 @@
 #include "genotype_likelihood.h"
 #include "ld_prune.h"
 #include "optimizer.h"
+#include "relationship_likelihood.h"
 
 namespace fastlckin {
 
@@ -47,8 +48,12 @@ struct KinshipResult {
     double pi_hat = 0.0;         ///< Kinship coefficient = 0.5*k1 + k2
     int n_snps = 0;              ///< Number of SNPs used
     double log_likelihood = 0.0; ///< Best negative log-likelihood
-    std::string relationship;    ///< Classification label
+    std::string relationship;    ///< Classification label (threshold-based or model selection)
     bool failed = false;         ///< Estimation failed flag
+
+    // Model selection fields (v0.7.0)
+    std::array<double, NUM_RELATIONSHIP_TYPES> rel_log_likelihoods{}; ///< Per-relationship log-likelihoods
+    std::string ms_relationship;  ///< Model selection classification result
 
     // Standard errors and 95% confidence intervals (v0.7.0)
     // -1.0 indicates NA (boundary or non-positive-definite Hessian)
@@ -104,6 +109,8 @@ struct KinshipConfig {
     int gq_min     = 1;
     int n_restarts = 5;           ///< Increased from 3 in v0.3.0 for better global optimum search
     bool classify  = false;
+    bool model_selection = false;  ///< Enable model selection classification (v0.7.0)
+    bool output_likelihoods = false; ///< Output per-relationship log-likelihoods (v0.7.0)
     bool verbose   = false;
 
     // LD pruning parameters
@@ -149,6 +156,7 @@ private:
     std::vector<SNPInfo> _snp_infos;          ///< VCF SNPs (filtered biallelic)
     LikelihoodMatrix _gl_matrix;                ///< [sample][snp] genotype likelihoods
     IBS_IBD_Matrix _ibs_ibd;                   ///< [9][snp][3] (Mij model)
+    RelationshipLikelihoodMatrix _rel_likelihoods; ///< Exact per-relationship probs (v0.7.0)
     std::vector<std::vector<int8_t>> _bed_genotypes; ///< [sample][snp] for LD (Mode 2/3)
     std::vector<std::vector<double>> _expected_genotypes; ///< [sample][snp] for LD (Mode 1)
     std::vector<int> _global_ld_retained;      ///< Global LD-pruned SNP indices (v0.3.0)
@@ -193,6 +201,17 @@ private:
     /// Screen pairs using KING-robust, return only those above threshold (v0.4.0)
     std::vector<std::pair<int, int>> _screen_pairs(
         const std::vector<std::pair<int, int>>& all_pairs
+    );
+
+    /// Pre-compute exact relationship likelihoods (v0.7.0)
+    void _precompute_relationship_likelihoods();
+
+    /// Perform model selection for a pair (v0.7.0)
+    /// @return Index of best relationship type (0-7)
+    int _model_selection_pair(
+        const std::vector<std::array<double, 9>>& pibs_per_snp,
+        const std::vector<int>& retained,
+        KinshipResult& result
     );
 };
 
