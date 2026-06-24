@@ -78,7 +78,7 @@ static void usage(const char* prog) {
         "  --founders INT    Independent (unrelated) founders     [" << DEF_FOUNDERS << "]\n"
         "                    If 0, auto-calculated from relationship counts.\n"
         "  --dup INT         Duplicate / MZ-twin pairs            [" << DEF_DUP  << "]\n"
-        "  --po INT          Extra parent-offspring pairs          [" << DEF_PO   << "]\n"
+        "  --po INT          Extra parent-offspring pairs         [" << DEF_PO   << "]\n"
         "  --fs INT          Full-sibling families (2 children ea)[" << DEF_FS   << "]\n"
         "  --hs INT          Half-sibling pairs                   [" << DEF_HS   << "]\n"
         "  (Avuncular pairs arise automatically from FS families.)\n\n"

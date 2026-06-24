@@ -21,86 +21,17 @@
 using namespace fastlckin;
 
 // ── Normalization: sum of 9 genotype combo probabilities = 1 ────────
+// Each relationship type is tested individually at FST=0, p=0.3
 
-TEST_CASE(normalization_unrelated_fst0) {
+TEST_CASE(normalization_all_types_fst0) {
     auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::UNRELATED];
+    for (int r = 0; r < NUM_RELATIONSHIP_TYPES; ++r) {
+        double sum = 0.0;
+        for (int c = 0; c < 9; ++c) {
+            sum += R[c][r];
+        }
+        CHECK_NEAR(sum, 1.0, 1e-10);
     }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_duplicate_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::DUPLICATE_MZ];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_po_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::PARENT_OFFSPRING];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_fs_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::FULL_SIBLING];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_hs_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::HALF_SIBLING];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_avuncular_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::AVUNCULAR];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_grandparent_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::GRANDPARENT];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_first_cousin_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::FIRST_COUSIN];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
-}
-
-TEST_CASE(normalization_great_grandparent_fst0) {
-    auto R = compute_relationship_probs_single_snp(0.3, 0.0);
-    double sum = 0.0;
-    for (int c = 0; c < 9; ++c) {
-        sum += R[c][(int)RelationshipType::GREAT_GRANDPARENT];
-    }
-    CHECK_NEAR(sum, 1.0, 1e-10);
 }
 
 // ── Normalization across multiple AF and FST values ─────────────────

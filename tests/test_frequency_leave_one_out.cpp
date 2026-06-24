@@ -187,6 +187,58 @@ TEST_CASE(leave_one_out_invalid_indices) {
     CHECK(afs[0] < 0.01);
 }
 
+TEST_CASE(loo_em_linearity_property) {
+    // Leave-one-out should satisfy:
+    // AF_loo = (2*N*AF_full - E[G_excluded]) / (2*(N-1))
+    int n = 20;
+    std::vector<std::vector<int>> gt(n, std::vector<int>(1));
+    for (int i = 0; i < 10; ++i) gt[i][0] = 0;
+    for (int i = 10; i < 20; ++i) gt[i][0] = 1;
+
+    const double EPS = 1e-10;
+    LikelihoodMatrix lk(n, std::vector<GenotypeLikelihood>(1));
+    for (int i = 0; i < n; ++i) {
+        int g = gt[i][0];
+        lk[i][0].gl[0] = EPS; lk[i][0].gl[1] = EPS; lk[i][0].gl[2] = EPS;
+        lk[i][0].gl[g] = 1.0;
+        lk[i][0].masked = false;
+    }
+
+    auto afs_full = compute_af_from_likelihoods(lk);
+    double af_full = afs_full[0];  // Should be 0.25
+
+    // Exclude 2 het samples
+    std::vector<int> exclude = {10, 11};
+    auto afs_loo = compute_af_from_likelihoods_leave_one_out(lk, exclude);
+    double af_loo = afs_loo[0];
+
+    // Theoretical: (20*0.25*2 - 2) / (18*2) = (10 - 2) / 36 = 8/36 = 0.222
+    double af_expected = (2.0 * n * af_full - 2.0) / (2.0 * (n - 2));
+    CHECK_NEAR(af_loo, af_expected, 0.01);
+}
+
+TEST_CASE(loo_handles_edge_cases) {
+    // All samples identical (hom_alt) — LOO should still work
+    int n = 5;
+    const double EPS = 1e-10;
+    LikelihoodMatrix lk(n, std::vector<GenotypeLikelihood>(1));
+    for (int i = 0; i < n; ++i) {
+        lk[i][0].gl[0] = EPS;
+        lk[i][0].gl[1] = EPS;
+        lk[i][0].gl[2] = 1.0;  // All hom_alt
+        lk[i][0].masked = false;
+    }
+
+    auto afs_full = compute_af_from_likelihoods(lk);
+    std::vector<int> exclude = {0, 1};
+    auto afs_loo = compute_af_from_likelihoods_leave_one_out(lk, exclude);
+
+    CHECK(afs_full.size() == 1);
+    CHECK(afs_loo.size() == 1);
+    CHECK(afs_full[0] > 0.99);
+    CHECK(afs_loo[0] > 0.99);
+}
+
 int main() {
     return RUN_ALL_TESTS();
 }

@@ -108,6 +108,58 @@ TEST_CASE(ld_prune_empty) {
     CHECK(retained.empty());
 }
 
+// ── Expected-genotype r² tests ─────────────────────────────────────
+
+TEST_CASE(r2_expected_matches_hard_high_coverage) {
+    // With integer-valued expected genotypes (simulating high-coverage),
+    // r²_expected should match r² from int8_t version
+    int n = 30;
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<int> dist(0, 2);
+
+    std::vector<int8_t> gi(n);
+    std::vector<double> gd(n);
+    for (int i = 0; i < n; ++i) {
+        gi[i] = static_cast<int8_t>(dist(rng));
+        gd[i] = static_cast<double>(gi[i]);
+    }
+
+    std::vector<int8_t> gi2(n);
+    std::vector<double> gd2(n);
+    for (int i = 0; i < n; ++i) {
+        gi2[i] = static_cast<int8_t>(dist(rng));
+        gd2[i] = static_cast<double>(gi2[i]);
+    }
+
+    double r2_hard = fastlckin::compute_r2(gi, gi2);
+    double r2_soft = fastlckin::compute_r2_expected(gd, gd2);
+
+    CHECK_NEAR(r2_hard, r2_soft, 1e-6);
+}
+
+TEST_CASE(ld_prune_from_likelihoods_removes_high_ld) {
+    // Two identical SNPs + one independent via expected genotypes
+    int n_samples = 30;
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<double> dist(0.0, 2.0);
+
+    std::vector<std::vector<double>> expected_g(n_samples, std::vector<double>(3));
+    for (int i = 0; i < n_samples; ++i) {
+        double g = dist(rng);
+        expected_g[i][0] = g;           // SNP 0
+        expected_g[i][1] = g;           // SNP 1 = copy (r²=1)
+        expected_g[i][2] = dist(rng);   // independent SNP 2
+    }
+
+    std::vector<bool> mask(3, false);
+    fastlckin::LDPruneConfig config;
+    config.window_size = 50;
+    config.r2_threshold = 0.8;
+
+    auto retained = fastlckin::ld_prune_from_likelihoods(expected_g, mask, config);
+    CHECK(retained.size() == 2);
+}
+
 int main() {
     return RUN_ALL_TESTS();
 }

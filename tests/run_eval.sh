@@ -53,7 +53,7 @@ if [[ "${1:-}" != "--skip-gen" ]]; then
     echo "=== Generating 5k evaluation data ==="
     "$PROJECT_DIR/build/tests/generate_known_relationships" \
         --founders 60 --snps 5000 --dup 3 --po 3 --fs 5 --hs 5 \
-        --af-min 0.1 --af-max 0.5 --seed 42 \
+        --af-min 0.1 --af-max 0.5 --seed 24 \
         --prefix eval_5k --output-dir "$EVAL_DIR"
     python3 "$SCRIPT_DIR/plink_to_vcf_pl.py" "$EVAL_DIR/eval_5k" "$EVAL_DIR/eval_5k.vcf" \
         --depth 8 --seed 42
@@ -123,16 +123,17 @@ $EVALUATE \
 #   - Unrelated PI_HAT: ≈0
 #   - Threshold classification: high accuracy for major categories
 KIT20K_DIR="$SCRIPT_DIR/data"
-if [[ ! -f "$KIT20K_DIR/kit_20k.bed" ]]; then
-    echo ""
-    echo "=========================================="
-    echo "  Generating kit_20k test data"
-    echo "=========================================="
-    "$PROJECT_DIR/build/tests/generate_known_relationships" \
-        --snps 20000 --seed 42 --prefix kit_20k --output-dir "$KIT20K_DIR"
-    # Rename ground_truth.tsv to avoid conflict with 5k eval data
-    mv "$KIT20K_DIR/ground_truth.tsv" "$KIT20K_DIR/kit_20k_ground_truth.tsv"
-fi
+echo ""
+echo "=========================================="
+echo "  Generating kit_20k test data"
+echo "=========================================="
+#"$PROJECT_DIR/build/tests/generate_known_relationships" \
+#    --snps 20000 --seed 42 --prefix kit_20k --output-dir "$KIT20K_DIR"  # Only 23 samples
+"$PROJECT_DIR/build/tests/generate_known_relationships" \
+    --founders 60 --dup 5 --po 20 --fs 15 --hs 20 \
+    --snps 20000 --seed 42 --prefix kit_20k --output-dir "$KIT20K_DIR"
+# Rename ground_truth.tsv to avoid conflict with 5k eval data
+mv "$KIT20K_DIR/ground_truth.tsv" "$KIT20K_DIR/kit_20k_ground_truth.tsv"
 
 echo ""
 echo "=========================================="

@@ -194,6 +194,30 @@ TEST_CASE(global_ld_prune_all_masked) {
     CHECK(retained.empty());
 }
 
+TEST_CASE(global_ld_prune_determinism) {
+    // Global LD pruning should be deterministic (same input → same output)
+    std::mt19937 rng(42);
+    int n_samples = 20;
+    int n_snps = 10;
+
+    std::vector<std::vector<int8_t>> genotypes(n_samples, std::vector<int8_t>(n_snps));
+    std::uniform_int_distribution<int> dist(0, 2);
+
+    for (int s = 0; s < n_snps; ++s) {
+        for (int i = 0; i < n_samples; ++i) {
+            genotypes[i][s] = dist(rng);
+        }
+    }
+
+    std::vector<bool> mask(n_snps, false);
+    LDPruneConfig config;
+
+    auto result1 = ld_prune_global(genotypes, mask, config);
+    auto result2 = ld_prune_global(genotypes, mask, config);
+
+    CHECK(result1 == result2);
+}
+
 int main() {
     return RUN_ALL_TESTS();
 }
