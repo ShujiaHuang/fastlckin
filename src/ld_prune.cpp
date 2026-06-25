@@ -8,8 +8,8 @@
 #include "ld_prune.h"
 #include <cmath>
 #include <algorithm>
-#include <numeric>
 #include <unordered_set>
+#include <vector>
 
 namespace fastlckin {
 
@@ -72,6 +72,7 @@ std::vector<int> ld_prune(
 
     // Build list of candidate SNP indices (unmasked)
     std::vector<int> candidates;
+    candidates.reserve(n_snps);
     for (int i = 0; i < n_snps; ++i) {
         if (!mask[i]) candidates.push_back(i);
     }
@@ -216,6 +217,7 @@ std::vector<int> ld_prune_from_likelihoods(
 
     // Build list of candidate SNP indices (unmasked)
     std::vector<int> candidates;
+    candidates.reserve(n_snps);
     for (int i = 0; i < n_snps; ++i) {
         if (!mask[i]) candidates.push_back(i);
     }

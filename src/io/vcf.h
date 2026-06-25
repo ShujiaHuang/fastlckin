@@ -7,7 +7,6 @@
 
 #include <iostream>
 #include <string>
-#include <memory>
 #include <stdexcept>
 
 #include <htslib/vcf.h>
@@ -16,7 +15,6 @@
 
 #include "vcf_header.h"
 #include "vcf_record.h"
-#include "utils.h"
 
 namespace ngslib {
 
