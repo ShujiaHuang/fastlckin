@@ -1,52 +1,11 @@
 /**
  * @file test_algorithm.cpp
- * @brief Unit tests for algorithm.h (math utilities)
+ * @brief Unit tests for algorithm.h (random_ibd_start)
  */
 
 #include "test_harness.h"
 #include "algorithm.h"
 #include <random>
-
-TEST_CASE(safe_log_positive) {
-    CHECK_NEAR(fastlckin::safe_log(1.0), 0.0, 1e-12);
-    CHECK_NEAR(fastlckin::safe_log(std::exp(1.0)), 1.0, 1e-12);
-}
-
-TEST_CASE(safe_log_zero) {
-    double v = fastlckin::safe_log(0.0);
-    CHECK(std::isinf(v) && v < 0);
-}
-
-TEST_CASE(safe_log_negative) {
-    double v = fastlckin::safe_log(-1.0);
-    CHECK(std::isinf(v) && v < 0);
-}
-
-TEST_CASE(log_sum_exp_basic) {
-    // log(exp(1) + exp(2) + exp(3))
-    std::vector<double> vals = {1.0, 2.0, 3.0};
-    double expected = std::log(std::exp(1.0) + std::exp(2.0) + std::exp(3.0));
-    CHECK_NEAR(fastlckin::log_sum_exp(vals), expected, 1e-10);
-}
-
-TEST_CASE(log_sum_exp_single) {
-    std::vector<double> vals = {5.0};
-    CHECK_NEAR(fastlckin::log_sum_exp(vals), 5.0, 1e-12);
-}
-
-TEST_CASE(log_sum_exp_empty) {
-    std::vector<double> vals;
-    double v = fastlckin::log_sum_exp(vals);
-    CHECK(std::isinf(v) && v < 0);
-}
-
-TEST_CASE(log_sum_exp_numerical_stability) {
-    // Very large values that would overflow naive exp()
-    std::vector<double> vals = {1000.0, 1001.0, 1002.0};
-    double result = fastlckin::log_sum_exp(vals);
-    // Should be ~1002 + log(1 + exp(-1) + exp(-2)) ≈ 1002 + 0.46
-    CHECK(result > 1002.0 && result < 1003.0);
-}
 
 TEST_CASE(random_ibd_start_valid) {
     std::mt19937 rng(42);

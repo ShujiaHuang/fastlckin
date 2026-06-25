@@ -6,22 +6,8 @@
  */
 
 #include "algorithm.h"
-#include <algorithm>
 
 namespace fastlckin {
-
-double log_sum_exp(const std::vector<double>& values) {
-    if (values.empty()) return -std::numeric_limits<double>::infinity();
-
-    double max_val = *std::max_element(values.begin(), values.end());
-    if (std::isinf(max_val)) return max_val;
-
-    double sum = 0.0;
-    for (double v : values) {
-        sum += std::exp(v - max_val);
-    }
-    return max_val + std::log(sum);
-}
 
 std::vector<double> random_ibd_start(std::mt19937& rng) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);

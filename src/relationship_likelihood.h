@@ -90,21 +90,21 @@ inline const char* ibd_class_name(IBDEquivalenceClass c) {
     }
 }
 
-/// Return human-readable name for a relationship type
-inline const char* relationship_type_name(RelationshipType t) {
-    switch (t) {
-        case RelationshipType::UNRELATED:         return "Unrelated";
-        case RelationshipType::DUPLICATE_MZ:      return "Duplicate/MZ";
-        case RelationshipType::PARENT_OFFSPRING:  return "Parent-Offspring";
-        case RelationshipType::FULL_SIBLING:      return "Full-Sibling";
-        case RelationshipType::HALF_SIBLING:      return "Half-Sibling";
-        case RelationshipType::AVUNCULAR:         return "Avuncular";
-        case RelationshipType::GRANDPARENT:       return "Grandparent";
-        case RelationshipType::FIRST_COUSIN:      return "First-Cousin";
-        case RelationshipType::GREAT_GRANDPARENT: return "Great-Grandparent";
-        default:                                  return "Unknown";
-    }
-}
+// /// Return human-readable name for a relationship type
+// inline const char* relationship_type_name(RelationshipType t) {
+//     switch (t) {
+//         case RelationshipType::UNRELATED:         return "Unrelated";
+//         case RelationshipType::DUPLICATE_MZ:      return "Duplicate/MZ";
+//         case RelationshipType::PARENT_OFFSPRING:  return "Parent-Offspring";
+//         case RelationshipType::FULL_SIBLING:      return "Full-Sibling";
+//         case RelationshipType::HALF_SIBLING:      return "Half-Sibling";
+//         case RelationshipType::AVUNCULAR:         return "Avuncular";
+//         case RelationshipType::GRANDPARENT:       return "Grandparent";
+//         case RelationshipType::FIRST_COUSIN:      return "First-Cousin";
+//         case RelationshipType::GREAT_GRANDPARENT: return "Great-Grandparent";
+//         default:                                  return "Unknown";
+//     }
+// }
 
 /// Exact relationship genotype probability matrix: [rel_type][combo][snp]
 /// Stores P(G1=g1, G2=g2 | R) for each of the 9 genotype combinations,

@@ -8,20 +8,10 @@
  * @date 2026-06-23
  */
 
-#include <cmath>
 #include <vector>
-#include <limits>
 #include <random>
 
 namespace fastlckin {
-
-/// Safe log: avoids log(0) by returning -infinity
-inline double safe_log(double x) {
-    return (x > 0.0) ? std::log(x) : -std::numeric_limits<double>::infinity();
-}
-
-/// Numerically stable log-sum-exp
-double log_sum_exp(const std::vector<double>& values);
 
 /// Generate a random starting point (k1, k2) satisfying IBD constraints:
 ///   k0 = 1 - k1 - k2 >= 0
