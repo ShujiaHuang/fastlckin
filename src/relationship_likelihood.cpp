@@ -17,7 +17,6 @@
 
 #include "relationship_likelihood.h"
 #include <cmath>
-#include <stdexcept>
 
 namespace fastlckin {
 

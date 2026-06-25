@@ -23,7 +23,6 @@
 
 #include <vector>
 #include <array>
-#include <string>
 
 #include "ibd_model.h"
 
