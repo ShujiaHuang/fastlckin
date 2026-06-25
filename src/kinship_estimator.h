@@ -181,13 +181,6 @@ private:
     /// Estimate IBD coefficients for a single pair
     KinshipResult _estimate_pair(int ind1, int ind2);
 
-    /// GLkin likelihood function (core objective)
-    double _glkin_likelihood(
-        const std::vector<double>& k,          ///< [k1, k2]
-        const std::array<double, 9>& pibs,     ///< PIBS for this pair
-        const std::vector<int>& snp_indices    ///< LD-pruned SNP indices
-    );
-
     // v0.4.0 helper methods
     /// Load specific sample pairs from a TSV file (ind1\tind2 per line)
     std::vector<std::pair<int, int>> _load_pairs_file(const std::string& path);

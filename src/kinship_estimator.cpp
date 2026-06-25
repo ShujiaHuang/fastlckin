@@ -530,10 +530,11 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
         if (k0 < 0 || k0 > 1 || k1 < 0 || k1 > 1 || k2 < 0 || k2 > 1) return 1e10;
 
         // Smooth Franks constraint penalty: 4*k0*k2 <= k1*k1
+        // Weight W = max(100, N) matches Fisher information curvature O(N)
         double franks_violation = 4.0 * k0 * k2 - k1 * k1;
         double penalty = 0.0;
         if (franks_violation > 0.0) {
-            penalty = 100.0 * franks_violation * franks_violation;
+            penalty = std::max(100.0, (double)retained.size()) * franks_violation * franks_violation;
         }
 
         double log_likelihood = 0.0;
@@ -676,8 +677,11 @@ KinshipResult KinshipEstimator::_estimate_pair(int ind1, int ind2) {
     }
 
     // ── v0.5.0: PO override based on IBS=0 count ──────────────────
+    // Require sufficient SNP count to avoid false positives in small samples
+    static constexpr int MIN_SNPS_FOR_PO_OVERRIDE = 100;
     bool po_override_applied = false;
-    if (k2_opt < 0.02 && ibs0_count == 0 && k0_opt > 0.01) {
+    if (k2_opt < 0.02 && ibs0_count == 0 && k0_opt > 0.01
+        && static_cast<int>(retained.size()) >= MIN_SNPS_FOR_PO_OVERRIDE) {
         k0_opt = 0.0;
         k1_opt = 1.0;
         k2_opt = 0.0;
@@ -1080,6 +1084,12 @@ std::vector<KinshipResult> KinshipEstimator::run() {
 
     // Step 3.5: Precompute exact relationship likelihoods (v0.7.0)
     if (_config.model_selection || _config.output_likelihoods) {
+        // Warn if per-SNP FST is used with model selection (FST inconsistency)
+        if (!_config.fst_path.empty() && _config.model_selection && _config.verbose) {
+            std::cerr << "[fastlckin] Warning: --fst-file and --classify=likelihood use different FST models.\n"
+                      << "[fastlckin]   IBS|IBD matrix uses per-SNP FST, but relationship likelihoods use global FST.\n"
+                      << "[fastlckin]   Model selection results may be inconsistent with IBD estimates.\n";
+        }
         _precompute_relationship_likelihoods();
     }
 
