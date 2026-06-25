@@ -31,7 +31,7 @@ fastlckin is built on top of [htslib](https://github.com/samtools/htslib)
 internal thread pool.
 
 ```
-fastlckin v0.7.0
+fastlckin v0.7.1
   fastlckin: Fast Maximum Likelihood Kinship Estimation from Low-Coverage Sequencing Data
 
 Usage: fastlckin <command> [options]
@@ -438,7 +438,7 @@ The output is a TSV file with comment headers and the following structure:
 ### Header comments (lines starting with `#`)
 
 ```tsv
-# fastlckin relatedness v0.7.0
+# fastlckin relatedness v0.7.1
 # Mode: VCF-only
 # Command: fastlckin relatedness -v cohort.vcf.gz -t 8
 # Date: 2026-06-24 10:30:00
