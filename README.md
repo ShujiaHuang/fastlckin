@@ -1,4 +1,10 @@
-# fastlckin
+<p align="center">
+  <a href="https://github.com/ShujiaHuang/fastlckin">
+    <img height="230" src="docs/assets/images/fastlckin_logo.svg">
+  </a>
+</p>
+
+# FastlcKin
 
 [![Build fastlckin](https://github.com/ShujiaHuang/fastlckin/actions/workflows/build.yml/badge.svg)](https://github.com/ShujiaHuang/fastlckin/actions/workflows/build.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
@@ -8,7 +14,7 @@
 > A high-performance C++17 tool for maximum likelihood kinship estimation
 > from low-coverage sequencing data using genotype likelihoods.
 
-***fastlckin*** is a cross-platform, high-performance C++ tool for estimating
+***FastlcKin*** is a cross-platform, high-performance C++ tool for estimating
 pairwise **kinship coefficients** (IBD sharing: k0, k1, k2) from **low-coverage
 sequencing data** (0.1×–5×) using genotype likelihoods. It implements a
 **dual-layer estimation framework**:

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 120" width="100%" height="120">
+  <defs>
+    <style>
+      .text-fastlc {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-weight: 800;
+        fill: #0F172A;
+      }
+      .text-n {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-weight: 800;
+        fill: #0EA5E9;
+      }
+      
+      /* 1. 底部输入端：低深度测序轨道 (IGV Tracks) */
+      .read-track {
+        stroke: #94A3B8;
+        stroke-width: 3;
+        stroke-linecap: round;
+      }
+      
+      /* 2. 算法收敛流 (Algorithm Inference Path) */
+      .inference-path {
+        stroke: #94A3B8;
+        stroke-width: 1.5;
+        stroke-dasharray: 4 3;
+        fill: none;
+      }
+
+      /* 3. 家系图字母 K (Pedigree Network 'K') */
+      .pedigree-edge {
+        stroke: #0EA5E9;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .pedigree-node {
+        fill: #334155;
+      }
+
+      /* 4. 先证者字母 i (Proband Target 'i') */
+      .letter-i-stem {
+        fill: #0EA5E9;
+      }
+      .node-focus {
+        fill: #EF4444; 
+      }
+      .focus-ring {
+        stroke: #EF4444;
+        stroke-width: 1.5;
+        stroke-dasharray: 2 2;
+        fill: none;
+      }
+      
+      /* GitHub 暗黑模式自适应 */
+      @media (prefers-color-scheme: dark) {
+        .text-fastlc { fill: #F8FAFC; }
+        .pedigree-node { fill: #CBD5E1; }
+        .read-track { stroke: #475569; }
+        .inference-path { stroke: #64748B; }
+      }
+    </style>
+  </defs>
+
+  <g transform="translate(130, 0)">
+    
+    <text x="170" y="80" font-size="52" class="text-fastlc" text-anchor="end">fastlc</text>
+
+    <g class="read-track">
+      <line x1="45" y1="92" x2="105" y2="92" />
+      <line x1="115" y1="92" x2="170" y2="92" />
+      <line x1="75" y1="102" x2="155" y2="102" />
+    </g>
+
+    <g transform="translate(185, 0)">
+      <line x1="5" y1="35" x2="5" y2="80" class="pedigree-edge" />
+      <line x1="5" y1="57" x2="30" y2="35" class="pedigree-edge" />
+      <line x1="5" y1="57" x2="30" y2="80" class="pedigree-edge" />
+      
+      <rect x="1" y="31" width="8" height="8" rx="1" class="pedigree-node" />   <circle cx="5" cy="80" r="4.5" class="pedigree-node" />                  <circle cx="30" cy="35" r="4.5" class="pedigree-node" />                 <rect x="26" y="76" width="8" height="8" rx="1" class="pedigree-node" />  </g>
+
+    <g transform="translate(225, 0)">
+      <rect x="0" y="48" width="7.5" height="32" rx="1.5" class="letter-i-stem" />
+      
+      <circle cx="3.75" cy="33" r="5.5" class="node-focus" />
+      <circle cx="3.75" cy="33" r="11" class="focus-ring" />
+    </g>
+
+    <path d="M 175,92 C 205,92 215,60 222,43" class="inference-path" />
+    <polygon points="222,43 218,48 226,48" fill="#94A3B8" transform="rotate(30 222 43)"/>
+
+    <text x="242" y="80" font-size="52" class="text-n" text-anchor="start">n</text>
+
+  </g>
+</svg>
